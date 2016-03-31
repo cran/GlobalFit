@@ -1,4 +1,5 @@
-#v1.2.3
+#v1.5.0
+#30.03.16
 
 
 make_full_network <- function(network,additional_reactions,verboseMode=1)
@@ -50,7 +51,7 @@ make_full_network <- function(network,additional_reactions,verboseMode=1)
 	
 	if(verboseMode==1)
 	{
-		cat("Add reactions to network:\n");
+		cat("Adding reactions to network...\n");
 	}
 	if(dim(additional_reacts)[1]>1)
 	{
@@ -665,10 +666,18 @@ minimize_network <- function(new_network,influxes,verboseMode)
 		verboseMode=2
 	}	
 	fv <- fluxVar(new_network,verboseMode=verboseMode)
-	blocked=intersect(which(lp_obj(fv)[1:length(react_id(new_network))]==0),which(lp_obj(fv)[(1+length(react_id(new_network))):(2*length(react_id(new_network)))]==0))	
+	
+	blocked=intersect(which(lp_obj(fv)[1:length(react_id(new_network))]==0),which(lp_obj(fv)[(1+length(react_id(new_network))):(2*length(react_id(new_network)))]==0))
+	blocked_back=which(lp_obj(fv)[1:length(react_id(new_network))]>=0)
+	blocked_for=which(lp_obj(fv)[(1+length(react_id(new_network))):(2*length(react_id(new_network)))]<=0)
+	
+	
+		
 	lowbnd(new_network)[influxes_pos]=0
 	
+	
 	blocked_reacts=setdiff(react_id(new_network)[blocked],react_id(ex))
+	
 	
 	if(length(blocked_reacts)>0)
 	{
@@ -681,18 +690,20 @@ minimize_network <- function(new_network,influxes,verboseMode)
 	{
 		
 		pos=which(react_id(old_n)==react_id(new_network)[i])
-		lowbnd(new_network)[i]=lowbnd(old_n)[pos]
-		uppbnd(new_network)[i]=uppbnd(old_n)[pos]
+		
+			lowbnd(new_network)[i]=lowbnd(old_n)[pos]
+		
+		
+			uppbnd(new_network)[i]=uppbnd(old_n)[pos]
+		
 	}
-
 	return(new_network)
 }
 
-bilevel_optimize <- function(network,on=c(),off=c(),additional_reactions=NULL,minimize=TRUE,simple=FALSE,verboseMode=1,cancel_case_penalty=NULL,not_delete_for=c(),not_delete_back=c(),param_list=NULL,use_indicator_constraints=FALSE,
-stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,alternatives=0,bio_stoich=1e-5,additional_biomass_metabolites=NULL,remove_biomass_metabolites=NULL)
+bilevel_optimize <- function(network,on=c(),off=c(),algorithm=1,additional_reactions=NULL,minimize=TRUE,simple=FALSE,verboseMode=1,cancel_case_penalty=NULL,not_delete_for=c(),not_delete_back=c(),param_list=NULL,use_indicator_constraints=FALSE,
+stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,alternatives=0,bio_stoich=1e-5,additional_biomass_metabolites=NULL,remove_biomass_metabolites=NULL,variable_lower_bound=NULL,forced_modifications=0)
 {
-	
-	max_penalty=0
+	max_penalty=1
 	old_network=network
 	react_erg=c()
 	x=format(Sys.time(), "%a %b %d %Y %X")
@@ -714,7 +725,14 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	{
 		stop(paste0("Simple must be a logical (binary) variable! Current value: ",minimize ," !\n"))
 	}
-	
+	if(algorithm!=1 && algorithm!=2)
+	{
+		stop(paste0("Algorithm must be 1(fast) or 2 Current value: ",algorithm ," !\n"))
+	}
+	if(algorithm==1 && length(variable_lower_bound)>0)
+	{
+		stop(paste0("Lower bounds of reactions can only be optimzed using algorithm 2. Current choice: ",algorithm ," !\n"))
+	}  
 	reaction_names=c()
 	penM=c()
 	penalties=c()
@@ -764,8 +782,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	
 	
 	
-	
-	
 	biomass_pos=which(obj_coef(network)==1)
 	if(length(biomass_pos)==0)
 	{
@@ -775,12 +791,14 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	{
 		stop(">1 biomass reactions definded");
 	}
+	
+	
+	
 	full_network=network
 	if(is.null(additional_reactions)==FALSE && length(additional_reactions)>0)
 	{
 		full_network=make_full_network(network,additional_reactions,verboseMode)
 	}
-	#fn <<- full_network
 	if(length(additional_biomass_metabolites)>0)
 	{
 		mets=which(S(network)[,biomass_pos]!=0)
@@ -821,7 +839,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			if(length(pos)>0)
 			{
 				
-				stop(paste0("ERROR!\n\tADIITIONAL BIOMASS METABOLITE: ",add_met," ALREADY IN BIOMASS EQUATION!!\n"))
+				stop(paste0("ERROR!\n\tADDITIONAL BIOMASS METABOLITE: ",add_met," ALREADY IN BIOMASS EQUATION!!\n"))
 			}
 			pos=which(used==add_met)
 			if(length(pos)>0)
@@ -958,66 +976,14 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			
 		}
 	}
+	
 	min_network=full_network
-	
-	if(minimize==TRUE)
-	{
-		if(verboseMode==1)
-		{
-			cat("Minimizing network...\n")
-		}
-		
-		
-		
-		min_network=minimize_network(full_network,influxes,verboseMode)
-		if(verboseMode==1)
-		{
-			cat("done!\n");
-		}
-	}
-
-	num_additional_reactions=0
-	num_additional_names=c()
-	min_penalties_hin=c()
-	min_penalties_ruck=c()
-	
-	
-	#mn <<- min_network
-	back_model=min_network
-	
-	for(i in 1:length(react_id(min_network)))
-	{
-		pos=which(react_id(network)==react_id(min_network)[i])
-		
-
-		if(length(pos)==0)
-		{
-			num_additional_reactions=num_additional_reactions+1
-			num_additional_names=c(num_additional_names,react_id(min_network)[i])
-			pos=which(penM[,1]==react_id(min_network)[i])
-			if(length(pos)==0)
-			{
-				stop("penalty of reaction not found")
-			}
-			min_penalties_hin=c(min_penalties_hin,penalties[pos])
-			min_penalties_ruck=c(min_penalties_ruck,penalties[pos])
-			
-				
-			
-			
-			
-			
-				
-			
-		}
-	}
-	
-	
 	reverse_hin=c()
 	reverse_hin_penalties=c()
 	reverse_back=c()
 	reverse_back_penalties=c()
-	max_reverse_reaction_penalty=0
+	
+	
 	if(is.null(reverse_reaction_list)==FALSE && length(reverse_reaction_list)>0)
 	{
 		if(is.null(stat_file)!=TRUE)
@@ -1062,9 +1028,9 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 						lowbnd(min_network)[pos]=-SYBIL_SETTINGS("MAXIMUM")
 						reverse_hin=c(reverse_hin,pos)
 						reverse_hin_penalties=c(reverse_hin_penalties,pen)
-						if(pen>max_reverse_reaction_penalty)
+						if(pen>max_penalty)
 						{
-							max_reverse_reaction_penalty=pen
+							max_penalty=pen
 						}
 					}
 					if(uppbnd(min_network)[pos]==0)
@@ -1072,9 +1038,9 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 						uppbnd(min_network)[pos]=SYBIL_SETTINGS("MAXIMUM")
 						reverse_back=c(reverse_back,pos)
 						reverse_back_penalties=c(reverse_back_penalties,pen)
-						if(pen>max_reverse_reaction_penalty)
+						if(pen>max_penalty)
 						{
-							max_reverse_reaction_penalty=pen
+							max_penalty=pen
 						}
 					}
 				}
@@ -1083,6 +1049,63 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		
 				
 	}
+	
+	if(minimize==TRUE)
+	{
+		if(verboseMode==1)
+		{
+			cat("Minimizing network...\n")
+		}
+		
+		
+		
+		min_network=minimize_network(min_network,influxes,verboseMode)
+		
+		if(verboseMode==1)
+		{
+			cat("done!\n");
+		}
+	}
+	
+	num_additional_reactions=0
+	num_additional_names=c()
+	min_penalties_hin=c()
+	min_penalties_ruck=c()
+	
+	
+	
+	back_model=min_network
+	
+	for(i in 1:length(react_id(min_network)))
+	{
+		pos=which(react_id(network)==react_id(min_network)[i])
+		
+
+		if(length(pos)==0)
+		{
+			num_additional_reactions=num_additional_reactions+1
+			num_additional_names=c(num_additional_names,react_id(min_network)[i])
+			pos=which(penM[,1]==react_id(min_network)[i])
+			if(length(pos)==0)
+			{
+				stop("penalty of reaction not found")
+			}
+			min_penalties_hin=c(min_penalties_hin,penalties[pos])
+			min_penalties_ruck=c(min_penalties_ruck,penalties[pos])
+			
+				
+			
+			
+			
+			
+				
+			
+		}
+	}
+	
+	
+	
+	
 	
 	SM=S(min_network)
 	nr=dim(SM)[1]
@@ -1093,7 +1116,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		cancel_case_penalty=(2*nc+num_additional_reactions*2+length(reverse_reaction_list)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites))*max_penalty
 	}
 	
-	#uppbnd(min_network)[2]=0
+	
 	if(is.null(stat_file)!=TRUE)
 	{
 		cat(paste0("\nModelname:\t",mod_name(network),"\n"),file=stat_file,append=TRUE)
@@ -1416,6 +1439,72 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			}
 		}
 	}
+	
+	
+	if(is.null(variable_lower_bound)==FALSE && length(variable_lower_bound)>0)
+	{
+		
+		if(is.null(stat_file)!=TRUE)
+		{
+			cat(paste0("\nVariable lower bound:\n"),file=stat_file,append=TRUE)
+		}
+		for(i in 1:length(variable_lower_bound))
+		{
+			
+			if(("reaction" %in% names(variable_lower_bound[[i]]))==FALSE)
+			{
+				stop(paste0("Reaction #",i,": not defined in variable lower bound\n"))
+			}
+			if(("min" %in% names(variable_lower_bound[[i]]))==FALSE)
+			{
+				stop(paste0("minimal value (min) #",i,": not defined in variable lower bound\n"))
+			}
+			if(("max" %in% names(variable_lower_bound[[i]]))==FALSE)
+			{
+				stop(paste0("maximal value (max) #",i,": not defined in variable lower bound\n"))
+			}
+			if(("penalty" %in% names(variable_lower_bound[[i]]))==FALSE)
+			{
+				stop(paste0("penalty #",i,": not defined in variable lower bound\n"))
+			}
+			reaction=variable_lower_bound[[i]]$reaction
+			pos=which(react_id(network)==reaction)
+			min=variable_lower_bound[[i]]$min
+			max=variable_lower_bound[[i]]$max
+			pen=variable_lower_bound[[i]]$penalty
+			if(length(pos)>0)
+			{
+				if(min > max)
+				{
+					stop(paste0("variable lower bound: minimal value (",min,") greater than maxival value (",max,") \n"))
+				}
+				else if(max > 0)
+				{
+					stop(paste0("variable lower bound: maximal value (",max,") greater than zero\n"))
+				}
+				else if(pen < 0)
+				{
+					stop(paste0("variable lower bound: value of penalty(",pen,") lower than zero\n"))
+				}
+				else
+				{
+					not_delete_back=unique(c(not_delete_back,reaction))
+					if(is.null(stat_file)!=TRUE)
+					{
+						cat(paste0("\treaction: ",reaction,"\tmin: ",min,"\tmax: ",max,"\n"),file=stat_file,append=TRUE)
+					}
+				}
+			}
+			else
+			{
+				stop(paste0("variable lower bound: reaction (",reaction,") not in network\n"))
+			}
+			
+			
+		}
+		
+	}
+	
 	if(is.null(stat_file)!=TRUE)
 	{
 		cat(paste0("\nSolver:\t",SYBIL_SETTINGS("SOLVER"),"\n"),file=stat_file,append=TRUE)
@@ -1430,14 +1519,118 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			}
 		}
 	}
-	ptm=proc.time()
+	###calculate essentials
+	if(minimize==TRUE)
+	{
+		on_fluxes=c()
+		if(length(on)>0)
+		{
+			for(i in 1:length(on))
+			{
+				on_flux=on[[i]]$on
+				if(length(on_flux)>0)
+				{
+					for(j in 1:length(on_flux))
+					{
+						rea=on_flux[[j]]$exRea
+						on_fluxes=c(rea,on_fluxes)
+					}
+				}
+			}
+		}
+		if(length(off)>0)
+		{
+			for(i in 1:length(off))
+			{
+				on_flux=off[[i]]$on
+				if(length(on_flux)>0)
+				{
+					for(j in 1:length(on_flux))
+					{
+						rea=on_flux[[j]]$exRea
+						on_fluxes=c(rea,on_fluxes)
+					}
+				}
+			}
+		}
+		
+		on_fluxes=unique(on_fluxes)
+		test_net=min_network
+		ex=findExchReact(test_net)
+		lowbnd(test_net)[react_pos(ex)]=0
+		
+		if(length(on_fluxes)>0)
+		{
+			for(i in 1:length(on_fluxes))
+			{
+				pos=which(react_id(test_net)==on_fluxes[i])
+				if(length(pos)>0)
+				{
+					lowbnd(test_net)[pos]=-1000
+				}
+			}
+		}
+		
+		test_reas=setdiff(react_id(test_net),react_id(ex))
+		ess_for=c()
+		ess_back=c()
+		for(i in 1:length(test_reas))
+		{
+			test3=test_net
+			pos=which(react_id(test3)==test_reas[i])
+			
+			if(length(pos)>0)
+			{
+				if(lowbnd(test3)[pos]==0)
+				{
+					not_delete_back=unique(c(not_delete_back,test_reas[i]))
+					
+				}
+				if(uppbnd(test3)[pos]==0)
+				{
+					
+					not_delete_for=unique(c(not_delete_for,test_reas[i]))
+				}
+				if(length(pos)>0)
+				{	
+					
+					
+					test3=test_net
+					if(lowbnd(test3)[pos] <= 0 && uppbnd(test3)[pos] >= 0)
+					{
+						uppbnd(test3)[pos]=0
+					
+						o=optimizeProb(test3)
+						if(lp_stat(o)==1 && lp_obj(o)<1e-9)
+						{
+							ess_for=c(ess_for,test_reas[i])
+							not_delete_for=unique(c(not_delete_for,test_reas[i]))
+						}
+						test3=test_net
+						lowbnd(test3)[pos]=0
+						o=optimizeProb(test3)
+						if(lp_stat(o)==1 && lp_obj(o)<1e-9)
+						{
+							
+							ess_back=c(ess_back,test_reas[i])
+							not_delete_back=unique(c(not_delete_back,test_reas[i]))
+						}
+					}
+				}
+			}
+		}
+		
+	}
+	
+	
 	
 	a_sol=0
 	stop_it=0
-	#mn <<- min_network
+	
 	alt_list=c()
 	while(stop_it!=1)
 	{
+		ptm=proc.time()
 		network=old_network
 		SM=S(min_network)
 		nr=dim(SM)[1]
@@ -1449,21 +1642,34 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		}
 		
 		
+		if(algorithm==2)
+		{
 		probl=sysBiolAlg(min_network,"GlobalFit",off=off,on=on,num_additional_reactions=num_additional_reactions, penalties_hin=min_penalties_hin
 		,penalties_ruck=min_penalties_ruck,cancel_case_penalty=cancel_case_penalty,not_delete_for=not_delete_for,bio_stoich=bio_stoich
 		,not_delete_back=not_delete_back,simple=simple,solverParm=param_list,additional_biomass_metabolites=additional_biomass_metabolites
 		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin
 		,reverse_hin_penalty=reverse_hin_penalties,reverse_back=reverse_back,reverse_back_penalty=reverse_back_penalties
-		,MaxPenalty=MaxPenalty,alternatives_list=alt_list
-		#,writeProbToFileName="/lhome/daniel/globalfit/prob.lp"
+		,MaxPenalty=MaxPenalty,alternatives_list=alt_list,variable_lower_bound=variable_lower_bound,forced_alterations=forced_modifications
+		,use_indicator_constraints=use_indicator_constraints
+		#,writeProbToFileName="/home/daniel/Desktop/endophyte_genomes/skripts/globalfit/prob.lp"
 		)
+		}
+		if(algorithm==1)
+		{
+		probl=sysBiolAlg(min_network,"FastGlobalFit",off=off,on=on,num_additional_reactions=num_additional_reactions, penalties_hin=min_penalties_hin
+		,penalties_ruck=min_penalties_ruck,cancel_case_penalty=cancel_case_penalty,not_delete_for=not_delete_for,bio_stoich=bio_stoich
+		,not_delete_back=not_delete_back,simple=simple,solverParm=param_list,additional_biomass_metabolites=additional_biomass_metabolites
+		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin
+		,reverse_hin_penalty=reverse_hin_penalties,reverse_back=reverse_back,reverse_back_penalty=reverse_back_penalties
+		,MaxPenalty=MaxPenalty,alternatives_list=alt_list,variable_lower_bound=NULL,forced_alterations=forced_modifications
+		,use_indicator_constraints=use_indicator_constraints
+		#,writeProbToFileName="/home/daniel/Desktop/endophyte_genomes/skripts/globalfit/prob.lp"
+		)
+		}
 		
 		erg=proc.time()-ptm
 		
-		#prob <<- probl
-	
-	
-		#mn <<- min_network
+		
 		back_model=min_network
 	
 		if(verboseMode==1)
@@ -1485,7 +1691,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	
 		ptm=proc.time()
 		o=optimizeProb(probl)
-		#sol <<- o
+		
 		status=as.numeric(o[3])
 		
 		objective_value=as.numeric(o[2])
@@ -1511,7 +1717,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			len=len+1
 			alt_list[[len]]=o
 			
-			#al <<- alt_list
+			
 			if(is.logical(alternatives)==FALSE)
 			{
 				if(a_sol>=alternatives)
@@ -1566,8 +1772,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		off_hin=c()
 		off_ruck=c()
 
-		#fl <<- fluxes
-		
 		off_hin=as.integer(fluxes[(length(reverse_hin)+length(reverse_back)+1+2*num_additional_reactions):(length(reverse_hin)+length(reverse_back)+nc+2*num_additional_reactions+length(additional_biomass_metabolites))])
 		off_hin=which(off_hin==1)
 		
@@ -1579,8 +1783,19 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		do_not_consider_on=c()
 		do_not_consider_off=c()
 
-		#oh <<- off_hin
-		#or <<- off_ruck
+		modify_lower_bound=c()
+		modify_lower_bound_value=c()
+		if(length(variable_lower_bound)>0)
+		{
+		modify_lower_bound_start=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+1
+		modify_lower_bound_stop=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*1
+		modify_lower_bound=fluxes[modify_lower_bound_start:modify_lower_bound_stop]		
+		
+		modify_lower_bound_start=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*1+1
+		modify_lower_bound_stop=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2
+		modify_lower_bound_value=fluxes[modify_lower_bound_start:modify_lower_bound_stop]	
+		}
+		
 		nc=nc+length(additional_biomass_metabolites)
 		all_mets=unique(c(vec_additional_biomass_mets,met_id(min_network)))
 		nr=length(all_mets)
@@ -1589,7 +1804,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		{
 			for(i in 1:length(on))
 			{
-				temp=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+(1+nc+length(remove_biomass_metabolites))*(i-1)+1
+				temp=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2+(1+nc+length(remove_biomass_metabolites))*(i-1)+1
 				do_not_consider_on=c(do_not_consider_on,temp)
 			}
 		}
@@ -1601,9 +1816,8 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			
 				add_bio_met=length(additional_biomass_metabolites)
 				
+				temp=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2+(1+nc+length(remove_biomass_metabolites))*length(on)+(5*nc+nr+1+(1)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6+length(variable_lower_bound)*1)*(i-1)+1
 				
-				temp=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+(1+nc+length(remove_biomass_metabolites))*length(on)+(5*nc+nr+1+(1)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6)*(i-1)+1
-			
 					
 				do_not_consider_off=c(do_not_consider_off,temp)
 				
@@ -1637,9 +1851,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		off_hin=intersect(off_hin,react_id(network))
 		off_ruck=intersect(off_ruck,react_id(network))
 		
-		#off_hin=setdiff(off_hin,react_id(back_model)[reverse_back])
-		#off_ruck=setdiff(off_ruck,react_id(back_model)[reverse_hin])
-	
+		
 	
 	
 		if(num_additional_reactions>0)
@@ -1647,8 +1859,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			network=add_reacts(network,additional_reactions,verboseMode,union(on_hin,on_ruck))
 		}
 		
-		#off_hin=setdiff(off_hin)
-		#off_ruck=setdiff(off_ruck)
 		if(length(do_not_add)>0)
 		{
 			for(i in 1:length(do_not_add))
@@ -1687,23 +1897,22 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		}
 		react_erg=c(react_erg,"Add reverse reaction(s):\n")
 		printed=0
-		#rvh <<- c()
+	
 		if(length(reverse_hin)>0)
 		{
 	
 			rev_hin=as.integer(fluxes[1:(length(reverse_hin))])
-			#rvh <<- rev_hin
+			
 			rev_hin=which(rev_hin==1)
 			rev_hin_ids=react_id(min_network)[reverse_hin]
 			
 			rev_hin=rev_hin_ids[rev_hin]
 		
 		
-			#ofr <<- off_ruck
-			#ofh <<- off_hin
+			
 		
 			rev_hin=setdiff(rev_hin,off_ruck)
-			#rev_hin=setdiff(rev_hin,off_hin)
+			
 			if(length(rev_hin)>0)
 			{
 				printed=1
@@ -1995,7 +2204,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 					biomass_pos=which(react_id(back_model)==biomass_name)
 					obj_coef(back_model)[biomass_pos]=1
 			
-					#bm <<- back_model
 					if(verboseMode==1)
 					{
 						if(factor==-1)
@@ -2087,7 +2295,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 					biomass_pos=which(react_id(back_model)==biomass_name)
 					obj_coef(back_model)[biomass_pos]=1
 			
-					#bm <<- back_model
+					
 					if(verboseMode==1)
 					{					
 						cat(paste0("\tRemove: ",vec[1],"\n"))
@@ -2102,6 +2310,62 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 				}
 			}
 		}
+		if(printed==0)
+		{
+			if(verboseMode==1)
+			{
+				cat("\tNONE\n")
+			
+			}
+			if(print_it==1 && is.null(stat_file)!=TRUE)
+			{
+				cat("\tNONE\n",file=stat_file,append=TRUE)
+			}
+			react_erg=c(react_erg,"\tNONE\n")
+		}
+		
+		
+		printed=0
+		if(verboseMode==1)
+		{
+			cat("\nModify lower bounds of reaction(s):\n")
+		
+		}
+		if(print_it==1 && is.null(stat_file)!=TRUE)
+		{
+			cat("\nModify lower bounds of reaction(s):\n",file=stat_file,append=TRUE)
+		}
+		
+		change_lower_bound_reas=c()
+		change_lower_bound_value=c()
+	
+		if(length(which(modify_lower_bound==1))>0)
+		{
+			printed=1
+			for(k in 1:length(modify_lower_bound))
+			{
+				if(modify_lower_bound[k]==1)
+				{
+					reaction=variable_lower_bound[[k]]$reaction
+					old=variable_lower_bound[[k]]$min
+					pen=variable_lower_bound[[k]]$penalty
+					new_val=-(modify_lower_bound_value[k])
+					change_lower_bound_reas=c(change_lower_bound_reas,reaction)
+					change_lower_bound_value=c(change_lower_bound_value,new_val)
+					if(verboseMode==1)
+					{					
+						cat(paste0("\tReaction: ",reaction,"\told value: ",old,"\tnew value: ",new_val,"\tpenalty: ",pen,"\n"))
+										
+					}
+					if(print_it==1 && is.null(stat_file)!=TRUE)
+					{
+						cat(paste0("\tReaction: ",reaction,"\told value: ",old,"\tnew value: ",new_val,"\tpenalty: ",pen,"\n"),file=stat_file,append=TRUE)
+										
+					}
+				}
+			}
+		}
+		
 		if(printed==0)
 		{
 			if(verboseMode==1)
@@ -2177,6 +2441,8 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			}
 		}
 		o=optimizeProb(network)
+		
+		
 		if(verboseMode==1)
 		{
 			cat(paste0("Growth:\tWildtype\t",lp_obj(o),"\n"))
@@ -2192,9 +2458,22 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	
 			for(i in 1:length(on))
 			{
+				
 				name=on[[i]]$name
 				delete=unlist(on[[i]]$ko_react)
 				op2=network
+				if(!is.null(on[[i]]$biomass))
+				{
+					bm=on[[i]]$biomass
+					pos=which(react_id(op2)==bm)
+					if(length(pos)>0)
+					{
+						biomass_pos=pos
+						vec=rep(0,length(react_id(op2)))
+						vec[biomass_pos]=1
+						obj_coef(op2)=vec
+					}
+				}
 				if(length(delete)>0)
 				{
 					for(j in 1:length(delete))
@@ -2211,15 +2490,67 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 						}
 					}
 				}
+				
+				ex=findExchReact(op2)
+				lowbnd(op2)[react_pos(ex)]=0
+				on_flux=on[[i]]$on
+				if(length(on_flux)>0)
+				{
+					for(j in 1:length(on_flux))
+					{
+						rea=as.character(on_flux[[j]]$exRea)
+						value=as.numeric(on_flux[[j]]$value)
+						pos=which(react_id(op2)==rea)
+						if(length(pos)>0)
+						{
+							lowbnd(op2)[pos]=value
+						}
+					}
+				}
+				if(length(variable_lower_bound)>0)
+				{
+				
+					for(k in 1:length(variable_lower_bound))
+					{
+						
+						
+						reaction=variable_lower_bound[[k]]$reaction
+						pos=which(react_id(op2)==reaction)
+						min=variable_lower_bound[[k]]$min
+						max=variable_lower_bound[[k]]$max
+						pen=variable_lower_bound[[k]]$penalty
+						if(lowbnd(op2)[pos]<0)
+						{
+							lowbnd(op2)[pos]=min
+						}
+						
+						
+					}
+					
+					
+					
+				}
+				if(length(change_lower_bound_reas)>0)
+				{
+					for(j in 1:length(change_lower_bound_reas))
+					{
+						pos=which(react_id(op2)==change_lower_bound_reas[j])
+						if(length(pos)>0)
+						{
+							lowbnd(op2)[pos]=change_lower_bound_value[j]
+						}
+					}
+				}
+				
 				o=optimizeProb(op2)
 				if(verboseMode==1)
 				{
-					cat(paste0("Growth:\t",name,"\t",lp_obj(o),"\n"))
+					cat(paste0("Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"))
 				
 				}
 				if(print_it==1 && is.null(stat_file)!=TRUE)
 				{
-					cat(paste0("Growth:\t",name,"\t",lp_obj(o),"\n"),file=stat_file,append=TRUE)
+					cat(paste0("Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"),file=stat_file,append=TRUE)
 				}
 				
 			}
@@ -2232,6 +2563,19 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 				name=off[[i]]$name
 				delete=unlist(off[[i]]$ko_react)
 				op2=network
+				
+				if(!is.null(off[[i]]$biomass))
+				{
+					bm=off[[i]]$biomass
+					pos=which(react_id(op2)==bm)
+					if(length(pos)>0)
+					{
+						biomass_pos=pos
+						vec=rep(0,length(react_id(op2)))
+						vec[biomass_pos]=1
+						obj_coef(op2)=vec
+					}
+				}
 				for(j in 1:length(delete))
 				{
 					pos=which(react_id(op2)==delete[j])
@@ -2245,15 +2589,67 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 					{
 					}
 				}
+				ex=findExchReact(op2)
+				lowbnd(op2)[react_pos(ex)]=0
+				on_flux=off[[i]]$on
+				if(length(on_flux)>0)
+				{
+					for(j in 1:length(on_flux))
+					{
+						rea=as.character(on_flux[[j]]$exRea)
+						value=as.numeric(on_flux[[j]]$value)
+						pos=which(react_id(op2)==rea)
+						pos2=which(off_ruck==rea)
+						
+						if(length(pos)>0 && length(pos2)==0)
+						{
+							lowbnd(op2)[pos]=value
+						}
+					}
+				}
+				if(length(variable_lower_bound)>0)
+				{
+				
+					for(k in 1:length(variable_lower_bound))
+					{
+						
+						
+						reaction=variable_lower_bound[[k]]$reaction
+						pos=which(react_id(op2)==reaction)
+						min=variable_lower_bound[[k]]$min
+						max=variable_lower_bound[[k]]$max
+						pen=variable_lower_bound[[k]]$penalty
+						if(lowbnd(op2)[pos]<0)
+						{
+							lowbnd(op2)[pos]=min
+						}
+						
+					}
+					
+					
+					
+				}
+				if(length(change_lower_bound_reas)>0)
+				{
+					for(j in 1:length(change_lower_bound_reas))
+					{
+						pos=which(react_id(op2)==change_lower_bound_reas[j])
+						if(length(pos)>0)
+						{
+							lowbnd(op2)[pos]=change_lower_bound_value[j]
+						}
+					}
+				}
 				o=optimizeProb(op2)
+				
 				if(verboseMode==1)
 				{
-					cat(paste0("Non-Growth:\t",name,"\t",lp_obj(o),"\n"))
+					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"))
 				
 				}
 				if(print_it==1 && is.null(stat_file)!=TRUE)
 				{
-					cat(paste0("Non-Growth:\t",name,"\t",lp_obj(o),"\n"),file=stat_file,append=TRUE)
+					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"),file=stat_file,append=TRUE)
 				}
 				
 			}
@@ -2277,7 +2673,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	
 	}
 	
-	#n2 <<- network
 	return(network)
 	
 }

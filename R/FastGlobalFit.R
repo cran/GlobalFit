@@ -1,9 +1,9 @@
-#v1.4.0
-#26.12.15
+#v1.5.0
+#30.03.16
 
 
 
-setClass(Class = "sysBiolAlg_GlobalFit",
+setClass(Class = "sysBiolAlg_FastGlobalFit",
          representation(
              wu  = "numeric",
              wl  = "numeric",
@@ -17,13 +17,13 @@ setClass(Class = "sysBiolAlg_GlobalFit",
 #                            default constructor                               #
 #------------------------------------------------------------------------------#
 
-# contructor for class sysBiolAlg_GlobalFit
+# contructor for class sysBiolAlg_FastGlobalFit
 setMethod(f = "initialize",
-          signature = "sysBiolAlg_GlobalFit",
+          signature = "sysBiolAlg_FastGlobalFit",
           definition = function(.Object,
                                 model,
                                 LPvariant = FALSE,
-                                useNames = FALSE,
+                                useNames = SYBIL_SETTINGS("USE_NAMES"),
                                 cnames = NULL,
                                 rnames = NULL,
                                 pname = NULL,
@@ -51,6 +51,8 @@ setMethod(f = "initialize",
 				forced_alterations=0,
                                 writeProbToFileName = NULL, ...) {
   if ( ! missing(model) ) {
+  
+  		
   		
 		SM=S(model)
 		nr=dim(SM)[1]
@@ -58,6 +60,7 @@ setMethod(f = "initialize",
 		add_start=nc-num_additional_reactions+1-length(additional_biomass_metabolites)
 		add_end=nc
 		biomass_pos=which(obj_coef(model)==1)
+		
 		add_bio_name=c()
 		additional_biomass_metabolites_pen=c()
 		if(length(additional_biomass_metabolites)>0)
@@ -99,28 +102,20 @@ setMethod(f = "initialize",
 		
 		
 		MaxFlow=1e75
-		nCols=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2+(1+nc+length(remove_biomass_metabolites))*length(on)+(5*nc+nr+1+(1)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6+length(variable_lower_bound)*1)*length(off)
+		
+		delete_nCols=1+nc+2*nc+nr+(1)+2*nc+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites)
+		
+		delete_nRows=nr+nc+(1)+2*nc+2*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)*4+length(remove_biomass_metabolites)*5
+		
+		nCols=length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2+(1+nc+length(remove_biomass_metabolites))*length(on)+(delete_nCols)*length(off)
+		
 		
 		vec_vlb=c()
 		vec_vlb_pen=c()
 		vec_vlb_max=c()
-		if(length(variable_lower_bound)>0)
-		{
-			for(i in 1:length(variable_lower_bound))
-			{
-			
-				reaction=variable_lower_bound[[i]]$reaction
-				pos=which(react_id(model)==reaction)
-				min=variable_lower_bound[[i]]$min
-				max=variable_lower_bound[[i]]$max
-				pen=variable_lower_bound[[i]]$penalty
-				vec_vlb=c(vec_vlb,abs(min))
-				vec_vlb_pen=c(vec_vlb_pen,pen)
-				vec_vlb_max=c(vec_vlb_max,abs(max))
-			}
-		}
+		
 		nRows=length(variable_lower_bound)+(1+nr+nc*2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)+length(variable_lower_bound))*length(on)+
-		(7*nc+nr+1+(1)+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*7+length(variable_lower_bound)*2)*length(off)
+		(delete_nRows)*length(off)
 		
 		cub=c(rep(1,length(reverse_hin)),rep(1,length(reverse_back)),rep(1,2*num_additional_reactions),rep(1,2*nc),rep(1,length(additional_biomass_metabolites)),rep(1,length(remove_biomass_metabolites)),rep(1,length(variable_lower_bound)),vec_vlb)
 		clb=c(rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(0,2*num_additional_reactions),rep(0,2*nc),rep(0,length(additional_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)),rep(0,length(variable_lower_bound)),vec_vlb_max)
@@ -135,7 +130,6 @@ setMethod(f = "initialize",
 		}
 		
 		objectives=c(reverse_hin_penalty,reverse_back_penalty,penalties_hin,penalties_ruck,del_pen,del_pen,additional_biomass_metabolites_pen,remove_biomass_metabolites_pen,vec_vlb_pen,rep(0,length(vec_vlb_pen)))
-		
 		
 		length_objectives=length(objectives)
 		
@@ -153,6 +147,7 @@ setMethod(f = "initialize",
 				if(length(pos)>0)
 				{
 					cub[length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+pos]=0
+					
 				}
 			}
 		}
@@ -163,6 +158,7 @@ setMethod(f = "initialize",
 				pos=which(react_id(model)==not_delete_back[i])
 				if(length(pos)>0)
 				{
+					
 					cub[length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+nc+pos]=0
 				}
 			}
@@ -178,6 +174,7 @@ setMethod(f = "initialize",
 				{
 					clb[length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+pos]=1
 					objectives[length(reverse_hin)+length(reverse_back)+2*num_additional_reactions+pos]=0
+					
 				}
 			}
 		}
@@ -231,6 +228,8 @@ setMethod(f = "initialize",
 				{
 					allow_exchange=on[[i]]$allow_exchange
 				}
+				
+				
 				if(!is.null(on[[i]]$biomass))
 				{
 					bm=on[[i]]$biomass
@@ -246,13 +245,12 @@ setMethod(f = "initialize",
 				
 				
 				ex_pos=react_pos(ex)
-				
 				for(k in 1:length(ex_pos))
 				{
-					
 					if(ex_pos[k]>=add_start && allow_exchange==TRUE)
 					{
 						lowbnd(model_temp)[ex_pos[k]]=-1000
+						
 					}
 					else
 					{	
@@ -316,6 +314,7 @@ setMethod(f = "initialize",
 				}
 				offset_c=num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)*2+(nc+length(remove_biomass_metabolites)+1)*(i-1)
 				offset_r=0+(nr+nc*2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)+length(variable_lower_bound))*(i-1)
+				
 				
 				add_nCols=nc+1+length(remove_biomass_metabolites)
 				add_nRows=nr+1+nc*2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(variable_lower_bound)
@@ -386,6 +385,7 @@ setMethod(f = "initialize",
 				if(forced==FALSE)
 				{
 					addM[add_nRows,1]=-(2*living_threshold)
+					
 				}
 				
 				if(length(variable_lower_bound)>0)
@@ -411,7 +411,6 @@ setMethod(f = "initialize",
 				add_clb=c(0,lowbnd(model_temp),rep(0,length(remove_biomass_metabolites)))
 				
 				add_obj=c((cancel_case_penalty*copy_number),rep(0,nc),rep(0,length(remove_biomass_metabolites)))
-				
 				if(forced==TRUE)
 				{
 					add_obj=c(0,rep(0,nc),rep(0,length(remove_biomass_metabolites)))
@@ -420,7 +419,6 @@ setMethod(f = "initialize",
 				add_rtype=c(rep("E",nr),rep("U",2*nc),rep("U",2*num_additional_reactions),rep("U",length(reverse_hin)),rep("U",length(reverse_back)),rep("U",2*length(additional_biomass_metabolites)),rep("U",length(remove_biomass_metabolites)),rep("U",length(variable_lower_bound)),"U")
 				add_rub=c(rep(0,nr),-lowbnd(model_temp),uppbnd(model_temp),rep(0,2*num_additional_reactions),rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(0,2*length(additional_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)),rep(0,length(variable_lower_bound)),-living_threshold)
 				add_rlb=c(rep(0,nr),rep(-SYBIL_SETTINGS("MAXIMUM"),2*nc),rep(-SYBIL_SETTINGS("MAXIMUM"),2*num_additional_reactions),rep(-2*SYBIL_SETTINGS("MAXIMUM"),length(reverse_hin)),rep(-2*SYBIL_SETTINGS("MAXIMUM"),length(reverse_back)),rep(-SYBIL_SETTINGS("MAXIMUM"),2*length(additional_biomass_metabolites)),rep(-SYBIL_SETTINGS("MAXIMUM"),length(remove_biomass_metabolites)),rep(-SYBIL_SETTINGS("MAXIMUM"),length(variable_lower_bound)),-SYBIL_SETTINGS("MAXIMUM"))
-				
 				
 				cub=c(cub,add_cub)
 				clb=c(clb,add_clb)
@@ -488,14 +486,16 @@ setMethod(f = "initialize",
 		
 		if(length(off)>0)
 		{	
-			
+			constrainter=1e7
 			for(i in 1:length(off))
 			{
+				
 				
 				
 				model_temp=model
 				
 				ex=findExchReact(model_temp)
+				allow_exchange=FALSE
 				allow_exchange=FALSE
 				if(!is.null(off[[i]]$allow_exchange))
 				{
@@ -593,7 +593,7 @@ setMethod(f = "initialize",
 						if(length(pos)>0)
 						{
 							lowbnd(model_temp)[pos]=0
-							uppbnd(model_temp)[pos]=1000
+							uppbnd(model_temp)[pos]=0
 							
 						}
 					}
@@ -636,6 +636,7 @@ setMethod(f = "initialize",
 							}
 						}
 						
+					
 					}
 				}
 				if(length(pos)>0)
@@ -646,18 +647,22 @@ setMethod(f = "initialize",
 				m3=model_temp
 				S(m3)=sm3
 				
+				
 				offset_c=length(variable_lower_bound)*2+length(reverse_hin)+length(reverse_back)+num_additional_reactions*2+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+((1+nc+length(remove_biomass_metabolites))*length(on))+(5*nc+nr+1+(1)+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites)+length(variable_lower_bound)*1)*(i-1)
 				
 				offset_r=(nr+nc*2+2*num_additional_reactions+1+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)+length(variable_lower_bound))*length(on)+(7*nc+nr+(1)+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites)+length(variable_lower_bound)*2)*(i-1)
 				
 				
 				
-				delete_nCols=1+nc+2*nc+nr+(1)+2*nc+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites)+length(variable_lower_bound)*1
-				delete_nRows=nr+nc+(1)+2*nc+4*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites)+length(variable_lower_bound)*2
 				
 				
+				
+				offset_c=length(variable_lower_bound)*2+length(reverse_hin)+length(reverse_back)+num_additional_reactions*2+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+((1+nc+length(remove_biomass_metabolites))*length(on))+(delete_nCols)*(i-1)
+				
+				offset_r=(nr+nc*2+2*num_additional_reactions+1+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)+length(variable_lower_bound))*length(on)+(delete_nRows)*(i-1)
 				
 				deleteM <- Matrix::Matrix(0,nrow = delete_nRows,ncol = delete_nCols,sparse = TRUE)
+				
 				sm=(S(model_temp))
 				model_temp2=model_temp
 				if(length(remove_biomass_metabolites)>0)
@@ -679,21 +684,17 @@ setMethod(f = "initialize",
 				
 				sm=(S(model_temp2))
 				
+				
+				
 				deleteM[1:nr,2:(nc+1+length(remove_biomass_metabolites))]=sm*(1)
-								
+					
+				
 				
 				vec1=rep(-1,(nc+length(remove_biomass_metabolites)))
 				vec2=rep(1,(nc+length(remove_biomass_metabolites)))
 				
 				vec=rep(-control_flux,(nc+length(remove_biomass_metabolites)))
-				if(length(additional_biomass_metabolites)>0)
-				{
-					abm_start=nc-length(additional_biomass_metabolites)
-					for(j in 1:length(additional_biomass_metabolites))
-					{
-						vec[(abm_start+j+length(remove_biomass_metabolites))]=0
-					}
-				}
+				
 				
 				SM=S(model_temp)
 				SM=t(as.matrix(SM))
@@ -732,8 +733,9 @@ setMethod(f = "initialize",
 					}
 					SM=newSM
 				}
-				deleteM[(1+nr):(nr+dim(SM)[1]),(2+3*nc+3*length(remove_biomass_metabolites)):(1+3*nc+3*length(remove_biomass_metabolites)+dim(SM)[2])]=SM*(1)
 				
+				deleteM[(1+nr):(nr+dim(SM)[1]),(2+3*nc+3*length(remove_biomass_metabolites)):(1+3*nc+3*length(remove_biomass_metabolites)+dim(SM)[2])]=SM*(1)
+					
 				
 				
 				deleteM[(nr+1):(nr+dim(SM)[1]),(nc+2+length(remove_biomass_metabolites)):(2*nc+1+length(remove_biomass_metabolites)*2)]=diag(vec1,dim(SM)[1],dim(SM)[1])
@@ -743,248 +745,60 @@ setMethod(f = "initialize",
 				
 				deleteM[(nr+nc+1+1+length(remove_biomass_metabolites)):(nr+3*nc+1+length(remove_biomass_metabolites)),(2):(nc+1)]=rbind(diag(-1,nc,nc),diag(1,nc,nc))
 				
-				if(length(additional_biomass_metabolites)>0)
+				
+				
+				
+				upp_vec=uppbnd(model_temp)
+				low_vec=abs(lowbnd(model_temp))
+				if(length(remove_biomass_metabolites)>0)
 				{
-					add_bio_start=nc-length(additional_biomass_metabolites)+1
-					deleteM[(nr+3*nc+1+1+length(remove_biomass_metabolites)):(nr+3*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)),(1+add_bio_start):(1+nc)]=diag(1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					upp_vec=append(upp_vec,rep(uppbnd(model_temp)[bio_pos],length(remove_biomass_metabolites)),after=bio_pos)
+					low_vec=append(low_vec,rep(abs(lowbnd(model_temp)[bio_pos]),length(remove_biomass_metabolites)),after=bio_pos)
 				}
+			
+				deleteM[(nr+1+3*nc+1+length(remove_biomass_metabolites)):(nr+1+4*nc+2*length(remove_biomass_metabolites)),(1+nc+1+length(remove_biomass_metabolites)):(1+2*nc+2*length(remove_biomass_metabolites))]=diag(low_vec,(nc+length(remove_biomass_metabolites)),(nc+length(remove_biomass_metabolites)))
 				
 				
-				deleteM[(nr+3*nc+1+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)):(nr+5*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3),(nc+2+length(remove_biomass_metabolites)):(3*nc+1+length(remove_biomass_metabolites)*3)]=diag(1,2*(nc+length(remove_biomass_metabolites)),2*(nc+length(remove_biomass_metabolites)))
+				deleteM[(nr+1+4*nc+1+2*length(remove_biomass_metabolites)):(nr+1+5*nc+3*length(remove_biomass_metabolites)),(1+2*nc+1+length(remove_biomass_metabolites)*2):(1+3*nc+length(remove_biomass_metabolites)*3)]=diag(upp_vec,(nc+length(remove_biomass_metabolites)),(nc+length(remove_biomass_metabolites)))
 				
 				
-				deleteM[(nr+3*nc+1+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)):(nr+5*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3),(nc+2*nc+nr+2+1+length(remove_biomass_metabolites)*3):(5*nc+nr+1+1+length(remove_biomass_metabolites)*5)]=diag(c(vec,vec),(2*nc+length(remove_biomass_metabolites)*2),(2*nc+length(remove_biomass_metabolites)*2))
 				
 				
-				stop_value_hin=c()
-				bin_value_hin=c()
-				stop_value_ruck=c()
-				bin_value_ruck=c()
-				stop_rub_hin=c()
-				stop_rub_ruck=c()
-				add_stop_hin=c()
-				add_stop_ruck=c()
-				fac=1
-				bio_pos=which(obj_coef(model_temp)==1)
-				add_reastart=nc-num_additional_reactions-length(additional_biomass_metabolites)+1
-				add_reastop=nc-length(additional_biomass_metabolites)
-				rev_hin_row=c()
-				rev_ruck_row=c()
-				row_pos=0
-				for(j in 1:length(uppbnd(model_temp)))
-				{
-					row_pos=row_pos+1
-					if(j>(nc-length(additional_biomass_metabolites)))
-					{
-						
-						stop_value_hin=c(stop_value_hin,(0))
-						bin_value_hin=c(bin_value_hin,-bio_stoich)
-						stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-					}
-					else if(num_additional_reactions>0 && j>=add_reastart && j<=add_reastop)
-					{
-						stop_value_hin=c(stop_value_hin,(control_flux*fac+uppbnd(model_temp)[j]))
-						bin_value_hin=c(bin_value_hin,-uppbnd(model_temp)[j])	
-						stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-					}
-					else if(uppbnd(model_temp)[j]==0)
-					{
-						pos=which(reverse_back==j)
-						if(length(pos)>0)
-						{
-							rev_ruck_row=c(rev_ruck_row,row_pos)
-							stop_value_hin=c(stop_value_hin,(control_flux*fac)+uppbnd(model_temp)[j])
-							bin_value_hin=c(bin_value_hin,0)
-							stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-						}
-						else
-						{
-							stop_value_hin=c(stop_value_hin,(control_flux*fac))
-							bin_value_hin=c(bin_value_hin,0)
-							stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-						}
-						if(bio_pos==j && length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								row_pos=row_pos+1
-								stop_value_hin=c(stop_value_hin,(control_flux*fac))
-								stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-							}
-						}
-					}
-					else
-					{
-						pos=which(reverse_back==j)
-						
-						if(length(pos)>0 && j != bio_pos)
-						{
-							stop_value_hin=c(stop_value_hin,(control_flux*fac+uppbnd(model_temp)[j]))
-							bin_value_hin=c(bin_value_hin,-uppbnd(model_temp)[j])	
-						
-						
-							stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-							rev_ruck_row=c(rev_ruck_row,row_pos)
-						}
-						else
-						{
-							stop_value_hin=c(stop_value_hin,((control_flux*fac)+uppbnd(model_temp)[j]))
-							bin_value_hin=c(bin_value_hin,-uppbnd(model_temp)[j])	
-						
-						
-							stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-						}
-						if(bio_pos==j && length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								row_pos=row_pos+1
-								stop_value_hin=c(stop_value_hin,((control_flux*fac)+uppbnd(model_temp)[j]))
-								
-						
-								stop_rub_hin=c(stop_rub_hin,(control_flux*fac))
-							}
-						}
-					}
-				}
-				row_pos=0
-				for(j in 1:length(lowbnd(model_temp)))
-				{
+				deleteM[(nr+1+3*nc+1+length(remove_biomass_metabolites)):(nr+1+5*nc+3*length(remove_biomass_metabolites)),(3+3*nc+nr+3*length(remove_biomass_metabolites)):(1+5*nc+nr+1+length(remove_biomass_metabolites)*5)]=diag(-1,(2*nc+2*length(remove_biomass_metabolites)),(2*nc+2*length(remove_biomass_metabolites)))
+				
+				deleteM[(nr+1+5*nc+1+3*length(remove_biomass_metabolites)),(3+3*nc+nr+3*length(remove_biomass_metabolites)):(1+5*nc+nr+1+length(remove_biomass_metabolites)*5)]=1
+				
+				deleteM[(nr+1+5*nc+1+3*length(remove_biomass_metabolites)),bio_pos+1]=-1
+				
+				deleteM[(nr+bio_pos),(1+3*nc+nr+1+length(remove_biomass_metabolites)*3)]=-1
+				
+				deleteM[(nr+nc+1+length(remove_biomass_metabolites)*1),(1+3*nc+nr+1+length(remove_biomass_metabolites)*3)]=-1
+				
+				
+				deleteM[(nr+5*nc+3+3*length(remove_biomass_metabolites)),(1+bio_pos)]=1
+				
 					
-					row_pos=row_pos+1
-					if(j>(nc-length(additional_biomass_metabolites)))
-					{
-						
-						stop_value_ruck=c(stop_value_ruck,(0))
-						bin_value_ruck=c(bin_value_ruck,0)
-						stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-					}
-					else if(num_additional_reactions>0 && j>=add_reastart && j<=add_reastop)
-					{
-						
-						stop_value_ruck=c(stop_value_ruck,(control_flux*fac-lowbnd(model_temp)[j]))
-						bin_value_ruck=c(bin_value_ruck,lowbnd(model_temp)[j])	
-						stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-					}
-					else if(lowbnd(model_temp)[j]==0)
-					{
-						
-						pos=which(reverse_hin==j)
-						if(length(pos)>0)
-						{
-							rev_hin_row=c(rev_hin_row,row_pos)
-							stop_value_ruck=c(stop_value_ruck,(control_flux*fac-lowbnd(model_temp)[j]))
-							bin_value_ruck=c(bin_value_ruck,0)
-							stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-						}
-						else
-						{
-							stop_value_ruck=c(stop_value_ruck,(control_flux*fac))
-							bin_value_ruck=c(bin_value_ruck,0)
-							stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-						}
-						if(bio_pos==j && length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								row_pos=row_pos+1
-								stop_value_ruck=c(stop_value_ruck,(control_flux*fac))
-								stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-							}
-						}
-					}
-					else
-					{
-						
-						pos=which(reverse_hin==j)
-						if(length(pos)>0 && j != bio_pos)
-						{
-							
-							stop_value_ruck=c(stop_value_ruck,(control_flux*fac-lowbnd(model_temp)[j]))
-							bin_value_ruck=c(bin_value_ruck,lowbnd(model_temp)[j])	
-						
-						
-							stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-							rev_hin_row=c(rev_hin_row,row_pos)
-						}
-						else
-						{
-							stop_value_ruck=c(stop_value_ruck,((control_flux*fac)-lowbnd(model_temp)[j]))
-							bin_value_ruck=c(bin_value_ruck,lowbnd(model_temp)[j])
-						
-							stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-						}
-						if(bio_pos==j && length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								row_pos=row_pos+1
-								
-								stop_value_ruck=c(stop_value_ruck,((control_flux*fac)-lowbnd(model_temp)[j]))
-								
-								stop_rub_ruck=c(stop_rub_ruck,(control_flux*fac))
-							}
-						}
-					}
-				}
-				
-				deleteM[(nr+5*nc+1+1+length(additional_biomass_metabolites)+3*length(remove_biomass_metabolites)):(nr+7*nc+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(nc+2*nc+nr+2+1+3*length(remove_biomass_metabolites)):(5*nc+nr+1+1+length(remove_biomass_metabolites)*5)]=diag(c(stop_value_ruck,stop_value_hin),(2*nc+2*length(remove_biomass_metabolites)),(2*nc+2*length(remove_biomass_metabolites)))
-				
-				
-				
-
-				min_mat <- Matrix::Matrix(0,nrow = nc+length(remove_biomass_metabolites),ncol = nc,sparse = TRUE)
-				plus_mat <- Matrix::Matrix(0,nrow = nc+length(remove_biomass_metabolites),ncol = nc,sparse = TRUE)
-				row_pos=1
-				
-				for(j in 1:length(react_id(model_temp)))
-				{
-					
-					if(j==bio_pos)
-					{
-						min_mat[row_pos,j]=-1
-						plus_mat[row_pos,j]=1
-						row_pos=row_pos+1
-						if(length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								min_mat[row_pos,j]=-1
-								plus_mat[row_pos,j]=1
-								row_pos=row_pos+1
-							}
-						}
-					}
-					else
-					{
-						min_mat[row_pos,j]=-1
-						plus_mat[row_pos,j]=1
-						row_pos=row_pos+1
-					}
-				}
-				
-				deleteM[(nr+5*nc+1+1+length(additional_biomass_metabolites)+3*length(remove_biomass_metabolites)):(nr+7*nc+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(2):(nc+1)]=rbind2(plus_mat,min_mat)
-				
 				if(forced==FALSE)
 				{
-					deleteM[(nr+nc+length(remove_biomass_metabolites)+1),1]=-1
+					deleteM[(nr+nc+1+1*length(remove_biomass_metabolites)),1]=-1
 					
-					deleteM[(nr+7*nc+1+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),1]=-2000
+					deleteM[(nr+5*nc+3+3*length(remove_biomass_metabolites)),1]=-SYBIL_SETTINGS("MAXIMUM")
 				}
-				
-				deleteM[(nr+7*nc+1+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),1+biomass_pos]=1
 				
 				if(num_additional_reactions>0)
 				{
-					deleteM[(nr+7*nc+2+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)):(nr+7*nc+1+num_additional_reactions+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(1+add_start):(add_start+num_additional_reactions)]=diag(-1,num_additional_reactions,num_additional_reactions)
-					deleteM[(nr+7*nc+2+num_additional_reactions+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)):(nr+7*nc+1+2*num_additional_reactions+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(add_start+1):(add_start+num_additional_reactions)]=diag(1,num_additional_reactions,num_additional_reactions)
+					deleteM[(nr+1+5*nc+2+1+3*length(remove_biomass_metabolites)):(nr+1+5*nc+2+num_additional_reactions+3*length(remove_biomass_metabolites)),(1+add_start):(add_start+num_additional_reactions)]=diag(-1,num_additional_reactions,num_additional_reactions)
+					
+					deleteM[(nr+1+5*nc+2+1+num_additional_reactions+3*length(remove_biomass_metabolites)):(nr+1+5*nc+2+2*num_additional_reactions+3*length(remove_biomass_metabolites)),(1+add_start):(add_start+num_additional_reactions)]=diag(1,num_additional_reactions,num_additional_reactions)
+				
 				}
 				
 				if(length(reverse_hin)>0)
 				{
 					for(j in 1:length(reverse_hin))
 					{
-						deleteM[(j+nr+7*nc+1+2*num_additional_reactions+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(reverse_hin[j]+1)]=-1
+						
+						deleteM[(j+(nr+1+5*nc+2+2*num_additional_reactions)+3*length(remove_biomass_metabolites)),(reverse_hin[j]+1)]=-1
 					}
 				}
 				
@@ -992,112 +806,107 @@ setMethod(f = "initialize",
 				{
 					for(j in 1:length(reverse_back))
 					{
-						deleteM[(j+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)),(reverse_back[j]+1)]=1
+						deleteM[(j+(nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin))+3*length(remove_biomass_metabolites)),(reverse_back[j]+1)]=1
 					}
 				}
 				
-				
 				if(length(additional_biomass_metabolites)>0)
 				{
-				
-					abm_start=nc-length(additional_biomass_metabolites)+1
+					ColStart=1+nc+2*nc+nr+(1)+2*nc+1+5*length(remove_biomass_metabolites)
+					ColEnd=1+nc+2*nc+nr+(1)+2*nc+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites)
+					RowStart=nr+nc-length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*1+1
+					RowEnd=nr+length(remove_biomass_metabolites)*1+nc
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					
+					RowEnd=nr+length(remove_biomass_metabolites)+nc+1
+					deleteM[RowEnd,ColStart:ColEnd]=-1
+					
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(remove_biomass_metabolites)*3
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					
+					ColStart=1+2*nc-length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*2
+					ColEnd=1+2*nc+length(remove_biomass_metabolites)*2
+					
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+2*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+3*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(constrainter,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					
+					ColStart=1+3*nc-length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*3
+					ColEnd=1+3*nc+length(remove_biomass_metabolites)*3
+					
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+3*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(constrainter,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 					
 					
-					deleteM[(nr+abm_start+length(remove_biomass_metabolites)):(nr+nc+length(remove_biomass_metabolites)),(1+(5*nc+nr)+2+length(remove_biomass_metabolites)*5):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5)]=diag(-1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
-					
-					deleteM[(nr+nc+1+length(remove_biomass_metabolites)),(1+(5*nc+nr)+2+length(remove_biomass_metabolites)*5):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5)]=-1
-					
-					deleteM[(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*5):(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),(1+(5*nc+nr)+2+length(remove_biomass_metabolites)*5):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5)]=diag(1,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 				}
 				
 				if(length(remove_biomass_metabolites)>0)
 				{
-				
+					ColStart=1+nc+2*nc+nr+(1)+2*nc+1+5*length(remove_biomass_metabolites)+length(additional_biomass_metabolites)
+					ColEnd=1+nc+2*nc+nr+(1)+2*nc+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites)
+					RowStart=nr+bio_pos+1
+					RowEnd=nr+bio_pos+length(remove_biomass_metabolites)
 					
-					deleteM[(nr+bio_pos+1):(nr+bio_pos+length(remove_biomass_metabolites)),(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5+1):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6)]=diag(-1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
-					deleteM[(nr+nc+1+length(remove_biomass_metabolites)),(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5+1):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6)]=-1
-					deleteM[(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5+1):(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6),(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5+1):(1+(5*nc+nr)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6)]=diag(1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
-					deleteM[(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*6+1):(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*7),(1+nc+1):(1+nc+length(remove_biomass_metabolites))]=diag(1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
-					
-					
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
 					
+					deleteM[(nr+nc+1+length(remove_biomass_metabolites)*1),ColStart:ColEnd]=-1
 					
-				}
-				if(length(variable_lower_bound)>0)
-				{
-				
-					stop_row_lo_biomass=(nr+5*nc+1+length(additional_biomass_metabolites)+3*length(remove_biomass_metabolites))
-					stop_row_gr_biomass=(nr+5*nc+1+length(additional_biomass_metabolites)+5*length(remove_biomass_metabolites))
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+1
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+length(remove_biomass_metabolites)
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
-					stop_col=(5*nc+nr+1+(1)+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites))
-					stop_col_end=(5*nc+nr+(1)+length(additional_biomass_metabolites)+6*length(remove_biomass_metabolites))+length(vec_vlb)
-					biopos=which(obj_coef(model_temp)==1)
 					
-					offset_r_vlb=(7*nc+nr+(1)+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites))
-					offset_c_vlb=1
-					for(k in 1:length(variable_lower_bound))
-					{
-						offset_r_vlb=offset_r_vlb+1
-						
-						reaction=variable_lower_bound[[k]]$reaction
-						pos=which(react_id(model)==reaction)
-						deleteM[offset_r_vlb,(offset_c_vlb+pos)]=-1
-						
-						if(pos>biopos)
-						{
-							deleteM[(stop_row_gr_biomass+pos),(stop_col+k)]=-1
-						}
-						else
-						{
-							deleteM[(stop_row_lo_biomass+pos),(stop_col+k)]=-1
-						}
-						
-					}
-					offset_r_vlb=(7*nc+nr+(1)+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites)+length(vec_vlb))
-					offset_r_vlb_end=(7*nc+nr+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites)+length(vec_vlb)*2)
-					deleteM[offset_r_vlb:offset_r_vlb_end,(stop_col+1):(stop_col_end+1)]=diag(1,length(vec_vlb))
+					ColStart=1+nc+1
+					ColEnd=1+nc+length(remove_biomass_metabolites)
+					
+					RowStart=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+1+length(remove_biomass_metabolites)
+					RowEnd=nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+length(remove_biomass_metabolites)*2
+					deleteM[RowStart:RowEnd,ColStart:ColEnd]=diag(1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
 				}
 				
+				delete_ctype=c("B",rep("C",(3*nc+nr+3*length(remove_biomass_metabolites))),"C",rep("C",2*nc+2*length(remove_biomass_metabolites)),rep("C",length(additional_biomass_metabolites)),rep("C",length(remove_biomass_metabolites)))
+				delete_cub=c(1,uppbnd(model_temp),rep(1,length(remove_biomass_metabolites)),rep(1e75,(2*nc+2*length(remove_biomass_metabolites))),rep(1e75,nr),1e75,rep(1e75,(2*nc+2*length(remove_biomass_metabolites))),rep(1,length(additional_biomass_metabolites)),rep(1,length(remove_biomass_metabolites)))
+				delete_clb=c(0,lowbnd(model_temp),rep(0,length(remove_biomass_metabolites)),rep(0,(2*nc+2*length(remove_biomass_metabolites))),rep(-1e75,nr),-1e75,rep(0,(2*nc+2*length(remove_biomass_metabolites))),rep(0,length(additional_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)))
+				delete_obj=rep(0,length(delete_clb))
+				delete_obj[1]=cancel_case_penalty*copy_number
 				
-				delete_ctype=c("B",rep("C",(3*nc+length(remove_biomass_metabolites)*3+nr)),"B",rep("B",(2*nc+length(remove_biomass_metabolites)*2)),rep("B",(length(additional_biomass_metabolites))),rep("B",(length(remove_biomass_metabolites))),rep("C",length(vec_vlb)))
 				
-				delete_cub=c(1,uppbnd(model_temp),rep(1,length(remove_biomass_metabolites)),rep(control_flux,(2*nc+length(remove_biomass_metabolites)*2)),rep(MaxFlow,nr),1,rep(1,(2*nc+length(remove_biomass_metabolites)*2)),rep(1,(length(additional_biomass_metabolites))),rep(1,length(remove_biomass_metabolites)),vec_vlb)
-				delete_clb=c(0,lowbnd(model_temp),rep(0,length(remove_biomass_metabolites)),rep(0,(2*nc+length(remove_biomass_metabolites)*2)),rep(-MaxFlow,nr),0,rep(0,(2*nc+length(remove_biomass_metabolites)*2)),rep(0,(length(additional_biomass_metabolites))),rep(0,length(remove_biomass_metabolites)),rep(0,length(vec_vlb)))
 				
-				delete_obj=c((cancel_case_penalty*copy_number),rep(0,(3*nc+nr+length(remove_biomass_metabolites)*3)),0,rep(0,(2*nc+length(remove_biomass_metabolites)*2)),rep(0,(length(additional_biomass_metabolites))),rep(0,(length(remove_biomass_metabolites))),rep(0,length(vec_vlb)))
+				
+				
 				if(forced==TRUE)
 				{
 					delete_obj=rep(0,length(delete_obj))
+					delete_cub[1]=0
+					delete_ctype[1]="C"
 					
 				}
 				
-				delete_rtype=c(rep("E",(nr+nc+length(remove_biomass_metabolites))),"E",rep("U",(6*nc+length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*4)),rep("U",num_additional_reactions*2),rep("U",length(reverse_hin)),rep("U",length(reverse_back)),rep("U",(length(additional_biomass_metabolites))),rep("U",(length(remove_biomass_metabolites)*2)),rep("U",length(vec_vlb)),rep("U",length(vec_vlb)))
-
-				delete_rub=c(rep(0,(nr+nc+length(remove_biomass_metabolites))),-1,-bin_value_ruck,-bin_value_hin,rep(0,(2*nc+2*length(remove_biomass_metabolites)+length(additional_biomass_metabolites))),stop_rub_ruck,stop_rub_hin,(1*living_threshold-(0)),rep(0,num_additional_reactions*2),rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(0,(length(additional_biomass_metabolites))),rep(1,length(remove_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)),rep(0,length(vec_vlb)),vec_vlb)
+				delete_rtype=c(rep("E",(nr+nc+1+length(remove_biomass_metabolites))),rep("U",(4*nc+2*length(remove_biomass_metabolites))),"E","U",rep("U",2*num_additional_reactions),rep("U",length(reverse_hin)),rep("U",length(reverse_back)),rep("U",4*length(additional_biomass_metabolites)),rep("U",2*length(remove_biomass_metabolites)))
+				delete_rub=c(rep(0,(nr+nc+length(remove_biomass_metabolites))),-1,rep(SYBIL_SETTINGS("MAXIMUM"),2*nc),rep(0,(2*nc+2*length(remove_biomass_metabolites))),0,living_threshold,rep(0,2*num_additional_reactions),rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(0,2*length(additional_biomass_metabolites)),rep(constrainter,2*length(additional_biomass_metabolites)),rep(constrainter,length(remove_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)))
 				
-				delete_rlb=c(rep(0,(nr+nc+length(remove_biomass_metabolites))),-1,rep(-SYBIL_SETTINGS("MAXIMUM"),(2*nc)),rep(-SYBIL_SETTINGS("MAXIMUM"),(length(additional_biomass_metabolites))),rep(-control_flux,(2*nc+length(remove_biomass_metabolites)*2)),rep((-control_flux),(2*nc+length(remove_biomass_metabolites)*2)),-control_flux,rep(-2*SYBIL_SETTINGS("MAXIMUM"),num_additional_reactions*2),rep(-2*SYBIL_SETTINGS("MAXIMUM"),length(reverse_hin)),rep(-2*SYBIL_SETTINGS("MAXIMUM"),length(reverse_back)),rep(-1,(length(additional_biomass_metabolites))),rep(0,length(remove_biomass_metabolites)),rep(-living_threshold,length(remove_biomass_metabolites)),rep(-SYBIL_SETTINGS("MAXIMUM"),length(vec_vlb)),rep(0,length(vec_vlb)))	
-				
-				if(length(additional_biomass_metabolites)>0)
-				{
-					
-					abm_start=nc-length(additional_biomass_metabolites)+1
-					delete_rub[(nr+4*nc+1+length(additional_biomass_metabolites)+abm_start+3*length(remove_biomass_metabolites)):(nr+5*nc+1+length(additional_biomass_metabolites)+3*length(remove_biomass_metabolites))]=control_flux
-					delete_rub[(nr+3*nc+1+length(additional_biomass_metabolites)+abm_start+2*length(remove_biomass_metabolites)):(nr+4*nc+1+length(additional_biomass_metabolites)+2*length(remove_biomass_metabolites))]=control_flux
-				}
-				
-				
-				deleteM[(nr+biomass_pos),(1+(3*nc+nr+length(remove_biomass_metabolites)*3)+1)]=-1
-				deleteM[(nr+nc+1+length(remove_biomass_metabolites)),(1+(3*nc+nr)+1+length(remove_biomass_metabolites)*3)]=-1
+				delete_rlb=c(rep(0,(nr+nc+length(remove_biomass_metabolites))),-1,rep(-SYBIL_SETTINGS("MAXIMUM"),2*nc),rep(-1e75,(2*nc+2*length(remove_biomass_metabolites))),0,-2*SYBIL_SETTINGS("MAXIMUM"),rep(-1000,2*num_additional_reactions),rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(-1e75,2*length(additional_biomass_metabolites)),rep(0,2*length(additional_biomass_metabolites)),rep(-constrainter,length(remove_biomass_metabolites)),rep(-constrainter,length(remove_biomass_metabolites)))
 				
 				
 				
-				cub=c(cub,delete_cub)
+				
+			cub=c(cub,delete_cub)
 				clb=c(clb,delete_clb)
+				
+				
 				ctype=c(ctype,delete_ctype)
 				objectives=c(objectives,delete_obj)
-		
+				
 				rub=c(rub,delete_rub)
 				rlb=c(rlb,delete_rlb)
 				rtype=c(rtype,delete_rtype)
@@ -1105,92 +914,89 @@ setMethod(f = "initialize",
 				BIGM[(offset_r+1):(offset_r+delete_nRows),(offset_c+1):(offset_c+delete_nCols)]=deleteM
 				
 				
-				BIGM[(offset_r+nr+nc+1+1+length(remove_biomass_metabolites)):(offset_r+nr+2*nc+1+length(remove_biomass_metabolites)),(num_additional_reactions*2+nc+1+length(reverse_hin)+length(reverse_back)):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back))]=diag(c(-bin_value_ruck),nc,nc)
+				col_offset=num_additional_reactions*2+length(reverse_hin)+length(reverse_back)
+				BIGM[(offset_r+nr+nc+2+length(remove_biomass_metabolites)):(offset_r+nr+2*nc+1+length(remove_biomass_metabolites)),(col_offset+nc+1):(col_offset+nc*2)]=diag(SYBIL_SETTINGS("MAXIMUM"),nc,nc)
+				BIGM[(offset_r+nr+2*nc+2+length(remove_biomass_metabolites)):(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)),(col_offset+1):(col_offset+nc)]=diag(SYBIL_SETTINGS("MAXIMUM"),nc,nc)
 				
-				BIGM[(offset_r+nr+nc*2+1+1+length(remove_biomass_metabolites)):(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)),(num_additional_reactions*2+1+length(reverse_hin)+length(reverse_back)):(num_additional_reactions*2+nc+length(reverse_hin)+length(reverse_back))]=diag(c(-bin_value_hin),nc,nc)
-				
-
-				bvr_mat <- Matrix::Matrix(0,nrow = nc+length(remove_biomass_metabolites),ncol = nc,sparse = TRUE)
-				bvh_mat <- Matrix::Matrix(0,nrow = nc+length(remove_biomass_metabolites),ncol = nc,sparse = TRUE)
-				row_pos=1
-				for(j in 1:nc)
+				if(length(remove_biomass_metabolites)==0)
 				{
-					if(j==bio_pos)
-					{
-						bvr_mat[row_pos,j]=bin_value_ruck[j]
-						bvh_mat[row_pos,j]=bin_value_hin[j]
-						row_pos=row_pos+1
-						if(length(remove_biomass_metabolites)>0)
-						{
-							for(k in 1:length(remove_biomass_metabolites))
-							{
-								bvr_mat[row_pos,j]=bin_value_ruck[j]
-								bvh_mat[row_pos,j]=bin_value_hin[j]
-								row_pos=row_pos+1
-							}
-						}
-						
-					}
-					else
-					{
-						bvr_mat[row_pos,j]=bin_value_ruck[j]
-						bvh_mat[row_pos,j]=bin_value_hin[j]
-						row_pos=row_pos+1
-					}
+					BIGM[(offset_r+nr+3*nc+2):(offset_r+nr+4*nc+1),(col_offset+nc+1):(col_offset+nc*2)]=diag(-constrainter,nc,nc)
+					BIGM[(offset_r+nr+4*nc+2):(offset_r+nr+5*nc+1),(col_offset+1):(col_offset+nc)]=diag(-constrainter,nc,nc)
+				}
+				else
+				{
+					
+					BIGM[(offset_r+nr+3*nc+2+length(remove_biomass_metabolites)):(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)+bio_pos),(col_offset+nc+1):(col_offset+nc+bio_pos)]=diag(-constrainter,bio_pos,bio_pos)
+					BIGM[(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)+bio_pos):(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)*2+bio_pos),(col_offset+nc+bio_pos)]=-constrainter
+					
+					BIGM[(offset_r+nr+3*nc+1+length(remove_biomass_metabolites)*2+bio_pos):(offset_r+nr+4*nc+1+length(remove_biomass_metabolites)*2),(col_offset+nc+bio_pos):(col_offset+nc*2)]=diag(-constrainter,(nc-bio_pos+1),(nc-bio_pos+1))
+					
+					BIGM[(offset_r+nr+4*nc+2+2*length(remove_biomass_metabolites)):(offset_r+nr+4*nc+1+2*length(remove_biomass_metabolites)+bio_pos),(col_offset+1):(col_offset+bio_pos)]=diag(-constrainter,bio_pos,bio_pos)
+					
+					BIGM[(offset_r+nr+4*nc+1+2*length(remove_biomass_metabolites)+bio_pos):(offset_r+nr+4*nc+1+length(remove_biomass_metabolites)*3+bio_pos),(col_offset+bio_pos)]=-constrainter
+					
+					BIGM[(offset_r+nr+4*nc+1+length(remove_biomass_metabolites)*3+bio_pos):(offset_r+nr+5*nc+1+length(remove_biomass_metabolites)*3),(col_offset+bio_pos):(col_offset+nc)]=diag(-constrainter,(nc-bio_pos+1),(nc-bio_pos+1))
+					
+					
+					
 				}
 				
-				BIGM[(offset_r+nr+nc*5+1+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3):(offset_r+nr+6*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4),(num_additional_reactions*2+nc+1+length(reverse_hin)+length(reverse_back)):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back))]=bvr_mat
 				
-				BIGM[(offset_r+nr+nc*6+1+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4):(offset_r+nr+7*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),(num_additional_reactions*2+1+length(reverse_hin)+length(reverse_back)):(num_additional_reactions*2+nc+length(reverse_hin)+length(reverse_back))]=bvh_mat
 				
 				if(length(additional_biomass_metabolites)>0)
 				{
-				
-					BIGM[(offset_r+nr+4*nc+1+length(additional_biomass_metabolites)+abm_start+length(remove_biomass_metabolites)*3):(offset_r+nr+5*nc+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3),(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+1):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))]=diag(control_flux,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 					
-					BIGM[(offset_r+nr+3*nc+1+1+length(remove_biomass_metabolites)*1):(offset_r+nr+3*nc+length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*1),(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+1):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))]=diag((-bio_stoich*0.9999),length(additional_biomass_metabolites),length(additional_biomass_metabolites))
+					ColStart=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+1)
+					ColEnd=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(remove_biomass_metabolites)*3
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
 					
-					abm_start=nc-length(additional_biomass_metabolites)+1
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1e5,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 					
-					row_start=(nr+6*nc+1+length(additional_biomass_metabolites)+abm_start+length(remove_biomass_metabolites)*5)
-					row_end=(nr+6*nc+1+length(additional_biomass_metabolites)+nc+length(remove_biomass_metabolites)*5)
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1e5,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 					
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+2*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+3*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(constrainter,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 					
-					
-					BIGM[(offset_r+row_start):(offset_r+row_end),(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+1):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))]=diag((-1000),length(additional_biomass_metabolites),length(additional_biomass_metabolites))
-					
-					row_start=(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)*5)
-					row_end=(nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5)
-					BIGM[(offset_r+row_start):(offset_r+row_end),(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+1):(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))]=diag((-1),length(additional_biomass_metabolites),length(additional_biomass_metabolites))
-					
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+3*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(constrainter,length(additional_biomass_metabolites),length(additional_biomass_metabolites))
 				}
 				
 				if(num_additional_reactions>0)
 				{
+					add_reastart=1*num_additional_reactions+1+length(reverse_hin)+length(reverse_back)
 					
-					add_reastart=nc-num_additional_reactions-length(additional_biomass_metabolites)+1+length(remove_biomass_metabolites)
+					add_reastop=2*num_additional_reactions+length(reverse_hin)+length(reverse_back)
 					
-					add_reastop=nc-length(additional_biomass_metabolites)+length(remove_biomass_metabolites)
+					row_start=(offset_r+(nr+1+5*nc+2+1)+length(remove_biomass_metabolites)*3)
+					row_end=(offset_r+(nr+1+5*nc+2+num_additional_reactions)+length(remove_biomass_metabolites)*3)
 					
-					row_start=(offset_r+nr+nc*5+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+add_reastart)
-					row_end=(offset_r+nr+nc*5+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+add_reastop)
+					BIGM[row_start:row_end,add_reastart:add_reastop]=diag(-SYBIL_SETTINGS("MAXIMUM"),num_additional_reactions,num_additional_reactions)
 					
 					
+					add_reastart=1+length(reverse_hin)+length(reverse_back)
 					
-					row_start=(offset_r+nr+nc*6+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4+add_reastart)
-					row_end=(offset_r+nr+nc*6+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4+add_reastop)
+					add_reastop=1*num_additional_reactions+length(reverse_hin)+length(reverse_back)
 					
-					BIGM[(offset_r+nr+7*nc+2+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5):(offset_r+nr+7*nc+1+num_additional_reactions+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),(num_additional_reactions+length(reverse_hin)+length(reverse_back)+1):(2*num_additional_reactions+length(reverse_hin)+length(reverse_back))]=diag(-SYBIL_SETTINGS("MAXIMUM"),num_additional_reactions,num_additional_reactions)
-					BIGM[(offset_r+nr+7*nc+2+num_additional_reactions+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5):(offset_r+nr+7*nc+1+2*num_additional_reactions+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),(1+length(reverse_hin)+length(reverse_back)):(num_additional_reactions+length(reverse_hin)+length(reverse_back))]=diag(-SYBIL_SETTINGS("MAXIMUM"),num_additional_reactions,num_additional_reactions)
+					row_start=(offset_r+(nr+1+5*nc+2+1+num_additional_reactions)+length(remove_biomass_metabolites)*3)
+					row_end=(offset_r+(nr+1+5*nc+2+2*num_additional_reactions)+length(remove_biomass_metabolites)*3)
+					BIGM[row_start:row_end,add_reastart:add_reastop]=diag(-SYBIL_SETTINGS("MAXIMUM"),num_additional_reactions,num_additional_reactions)
 				}
+				
+				
 				
 				if(length(reverse_hin)>0)
 				{
 					for(j in 1:length(reverse_hin))
 					{
 						
-						
-						BIGM[(offset_r+nr+7*nc+1+2*num_additional_reactions+j+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),j]=-SYBIL_SETTINGS("MAXIMUM")
+						row_start=(offset_r+(nr+1+5*nc+2+2*num_additional_reactions)+length(remove_biomass_metabolites)*3)
+					
+						BIGM[(row_start+j),j]=-SYBIL_SETTINGS("MAXIMUM")
 						
 					}
 				}
@@ -1199,70 +1005,43 @@ setMethod(f = "initialize",
 				{
 					for(j in 1:length(reverse_back))
 					{
-						BIGM[(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+j+1+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5),(length(reverse_hin)+j)]=-SYBIL_SETTINGS("MAXIMUM")
+						row_start=(offset_r+(nr+1+5*nc+2+2*num_additional_reactions)+length(reverse_hin)+length(remove_biomass_metabolites)*3)
+						BIGM[(row_start+j),(length(reverse_hin)+j)]=-SYBIL_SETTINGS("MAXIMUM")
 						
 					}
 				}
 				
+				
 				if(length(remove_biomass_metabolites)>0)
 				{
-					row_start=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*5)
-					row_end=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*6)	
+				
+					ColStart=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))+1
+					ColEnd=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites))+length(remove_biomass_metabolites)
+					RowStart=offset_r+nr+1+3*nc+length(remove_biomass_metabolites)*1+bio_pos+1
+					RowEnd=offset_r+nr+1+3*nc+length(remove_biomass_metabolites)*2+bio_pos
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(-constrainter,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
-					col_start=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+1)
-					col_end=(num_additional_reactions*2+2*nc+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)+length(remove_biomass_metabolites))
 					
-					BIGM[row_start:row_end,col_start:col_end]=diag(1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
+					RowStart=offset_r+nr+1+4*nc+length(remove_biomass_metabolites)*2+bio_pos+1
+					RowEnd=offset_r+nr+1+4*nc+length(remove_biomass_metabolites)*3+bio_pos
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(-constrainter,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
-					row_start=(offset_r+nr+5*nc+1+length(additional_biomass_metabolites)+1+bio_pos+length(remove_biomass_metabolites)*3)
-					row_end=(offset_r+nr+5*nc+1+length(additional_biomass_metabolites)+bio_pos+length(remove_biomass_metabolites)*4)
-					BIGM[row_start:row_end,col_start:col_end]=diag(lowbnd(model_temp)[bio_pos],length(remove_biomass_metabolites),length(remove_biomass_metabolites))
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*3+1
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(constrainter,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
-					row_start=(offset_r+nr+6*nc+1+length(additional_biomass_metabolites)+1+bio_pos+length(remove_biomass_metabolites)*4)
-					row_end=(offset_r+nr+6*nc+1+length(additional_biomass_metabolites)+bio_pos+length(remove_biomass_metabolites)*5)
-					BIGM[row_start:row_end,col_start:col_end]=diag(-uppbnd(model_temp)[bio_pos],length(remove_biomass_metabolites),length(remove_biomass_metabolites))
+					RowStart=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*4+1
+					RowEnd=offset_r+nr+1+5*nc+2+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+4*length(additional_biomass_metabolites)+length(remove_biomass_metabolites)*5
+					BIGM[RowStart:RowEnd,ColStart:ColEnd]=diag(-1,length(remove_biomass_metabolites),length(remove_biomass_metabolites))
 					
-					row_start=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*6)
-					row_end=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*7)
-					
-					BIGM[row_start:row_end,col_start:col_end]=diag(-SYBIL_SETTINGS("MAXIMUM"),length(remove_biomass_metabolites),length(remove_biomass_metabolites))
-					
-				}
-				if(length(variable_lower_bound)>0)
-				{
-					row_start=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*5)
-					row_end=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*5+length(vec_vlb))
-					col_start=length(reverse_hin)+length(reverse_back)+num_additional_reactions*2+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+1+length(vec_vlb)*1
-					col_stop=length(reverse_hin)+length(reverse_back)+num_additional_reactions*2+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)+length(vec_vlb)*2
-					
-					BIGM[row_start:row_end,col_start:col_stop]=diag(-1,length(vec_vlb))
-					row_start=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*5+length(vec_vlb))
-					row_end=(offset_r+nr+7*nc+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+1+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)*5+length(vec_vlb)*2)
-					
-					BIGM[row_start:row_end,col_start:col_stop]=diag(1,length(vec_vlb))
 					
 				}
+				
 				
 				
 			}
 		}
-		if(length(variable_lower_bound)>0)
-		{
-			offset_r=(nr+nc*2+2*num_additional_reactions+1+length(reverse_hin)+length(reverse_back)+length(additional_biomass_metabolites)*2+length(remove_biomass_metabolites)+length(variable_lower_bound))*length(on)+(7*nc+nr+(1)+1+2*num_additional_reactions+length(reverse_hin)+length(reverse_back)+2*length(additional_biomass_metabolites)+7*length(remove_biomass_metabolites)+length(variable_lower_bound)*2)*length(off)
-			
-			
-			offset_c=length(reverse_hin)+length(reverse_back)+num_additional_reactions*2+2*nc+length(additional_biomass_metabolites)+length(remove_biomass_metabolites)
-			
-			BIGM[(offset_r+1):(offset_r+length(variable_lower_bound)),(offset_c+1):(offset_c+length(variable_lower_bound))]=diag((vec_vlb),length(variable_lower_bound))	
-			
-			offset_c=offset_c+length(variable_lower_bound)
-			BIGM[(offset_r+1):(offset_r+length(variable_lower_bound)),(offset_c+1):(offset_c+length(variable_lower_bound))]=diag(1,length(variable_lower_bound))
-			
-			rub=c(rub,rep(SYBIL_SETTINGS("MAXIMUM"),length(vec_vlb)))
-			rlb=c(rlb,(vec_vlb))
-			rtype=c(rtype,rep("L",length(vec_vlb)))
-			
-		}
+		
 		if(is.null(MaxPenalty)==FALSE && simple==FALSE && length(alternatives_list)==0)
 		{
 			BIGM=rbind2(BIGM,objectives)	
@@ -1293,6 +1072,8 @@ setMethod(f = "initialize",
 				bin_sol=which(abs(ob_sol)>1e-9)
 				
 				
+				
+				
 				bin_on=intersect(bin,bin_sol)
 				
 				bin=objectives
@@ -1304,6 +1085,7 @@ setMethod(f = "initialize",
 					rub=c(rub,1e20)	
 					rlb=c(rlb,1e-3)
 					rtype=c(rtype,"L")
+					
 					nRows      = nRows+1
 				}
 			}
@@ -1316,6 +1098,7 @@ setMethod(f = "initialize",
 		}
 		if(forced_alterations>0)
 		{
+			
 			
 			
 			vec=rep(0,length(objectives))
@@ -1332,8 +1115,10 @@ setMethod(f = "initialize",
 		
 		
 		
-	   fi <- c(1:length(ctype))
-                
+		
+		
+                  fi <- c(1:length(ctype))
+               
 
            	binaries=which(ctype=="B")
   
@@ -1368,7 +1153,6 @@ setMethod(f = "initialize",
                       }
 
                       if (is.null(pname)) {
-                          
                       }
                       else {
                           stopifnot(is(pname, "character"),
@@ -1390,7 +1174,7 @@ setMethod(f = "initialize",
  		
                   .Object <- callNextMethod(.Object,
                   				
-                                            sbalg      = "GlobalFit",
+                                            sbalg      = "FastGlobalFit",
                                             pType      = "mip",
                                             scaling    = scaling,
                                             fi         = fi,
@@ -1433,8 +1217,10 @@ setMethod(f = "initialize",
 				}
 			}
 			count=1
+			
 			if(use_indicator_constraints==TRUE && SYBIL_SETTINGS("SOLVER")=="cplexAPI")
 			{
+				
 				binaries=which(ctype=="B")
 				binaries=setdiff(binaries,do_not_consider_on)
 				binaries=setdiff(binaries,do_not_consider_off)
@@ -1540,7 +1326,7 @@ setMethod(f = "initialize",
 #                  }
 #
 #                  .Object@problem   <- lp
-#                  .Object@algorithm <- "sysBiolAlg_GlobalFit"
+#                  .Object@algorithm <- "sysBiolAlg_FastGlobalFit"
 #                  .Object@nr        <- as.integer(nRows)
 #                  .Object@nc        <- as.integer(nCols)
 #                  .Object@fldind    <- as.integer(fi)
