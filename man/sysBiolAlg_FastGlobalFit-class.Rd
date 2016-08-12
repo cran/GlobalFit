@@ -2,20 +2,15 @@
 \Rdversion{1.1}
 \docType{class}
 \alias{sysBiolAlg_FastGlobalFit-class}
+\alias{initialize,sysBiolAlg_FastGlobalFit-method}
 
 \title{Class \code{"sysBiolAlg_FastGlobalFit"}}
 \description{
 Class, that builds the (fast) bilevel optimization object.
 }
 \section{Objects from the Class}{
-Objects can be created by calls of the form 
-\preformatted{new("sysBiolAlg_FastGlobalFit", model, LPvariant,useNames, cnames, rnames, 
-pname, scaling, penalties_hin, penalties_ruck, cancel_case_penalty, num_additional_reactions, 
-not_delete_for, not_delete_back, off, on, simple, reverse_hin, reverse_hin_penalty, 
-reverse_back, reverse_back_penalty, MaxPenalty, alternatives_list, additional_biomass_metabolites, 
-remove_biomass_metabolites, bio_stoich, use_indicator_constraints, variable_lower_bound, 
-forced_alterations, writeProbToFileName, ...)}.
-
+Objects can be created by calls of the form \code{new("sysBiolAlg_FastGlobalFit", model, LPvariant, useNames, cnames, rnames, pname, scaling, penalties_hin, penalties_ruck, cancel_case_penalty, num_additional_reactions, not_delete_for, not_delete_back, del_pen_hin, del_pen_ruck, off, on, simple, reverse_hin, reverse_hin_penalty, reverse_back, reverse_back_penalty, MaxPenalty, alternatives_list, additional_biomass_metabolites, remove_biomass_metabolites, bio_stoich, use_indicator_constraints, variable_lower_bound, forced_alterations, writeProbToFileName, ...)}.
+%%  ~~ describe objects here ~~ 
 }
 \section{Slots}{
   \describe{
@@ -39,6 +34,7 @@ Class \code{"\linkS4class{sysBiolAlg}"}, directly.
     \item{initialize}{\code{signature(.Object = "sysBiolAlg_FastGlobalFit")}: ... }
 	 }
 }
+
 \author{
 Daniel Hartleb
 }

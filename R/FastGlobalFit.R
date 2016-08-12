@@ -1,5 +1,4 @@
-#v1.5.0
-#30.03.16
+#11.08.16
 
 
 
@@ -34,6 +33,8 @@ setMethod(f = "initialize",
                                num_additional_reactions=0,
                                not_delete_for=NULL,
 				not_delete_back=NULL,
+				del_pen_hin=c(),
+				del_pen_ruck=c(),
                                off=NULL,
                                on=NULL,
                                simple=FALSE,                           
@@ -121,15 +122,11 @@ setMethod(f = "initialize",
 		clb=c(rep(0,length(reverse_hin)),rep(0,length(reverse_back)),rep(0,2*num_additional_reactions),rep(0,2*nc),rep(0,length(additional_biomass_metabolites)),rep(0,length(remove_biomass_metabolites)),rep(0,length(variable_lower_bound)),vec_vlb_max)
 				
 		ctype=c(rep("B",length(reverse_hin)),rep("B",length(reverse_back)),rep("B",2*num_additional_reactions),rep("B",2*nc),rep("B",length(additional_biomass_metabolites)),rep("B",length(remove_biomass_metabolites)),rep("B",length(variable_lower_bound)),rep("C",length(variable_lower_bound)))
-		del_pen=c(rep(1,length(1:(add_start-1))),(rep(0,length(add_start:nc))))
 		
 		
-		if(num_additional_reactions==0)
-		{
-			del_pen=c(rep(1,length(1:(add_start-1))),rep(0,length(additional_biomass_metabolites)))
-		}
-		
-		objectives=c(reverse_hin_penalty,reverse_back_penalty,penalties_hin,penalties_ruck,del_pen,del_pen,additional_biomass_metabolites_pen,remove_biomass_metabolites_pen,vec_vlb_pen,rep(0,length(vec_vlb_pen)))
+		objectives=c(reverse_hin_penalty,reverse_back_penalty,penalties_hin,penalties_ruck,del_pen_hin,del_pen_ruck,additional_biomass_metabolites_pen,remove_biomass_metabolites_pen,vec_vlb_pen,rep(0,length(vec_vlb_pen)))
+		#objectives=c(reverse_hin_penalty,reverse_back_penalty,penalties_hin,penalties_ruck,del_pen,del_pen,additional_biomass_metabolites_pen,remove_biomass_metabolites_pen,vec_vlb_pen,rep(0,length(vec_vlb_pen)))
+		#print(length(objectives))
 		
 		length_objectives=length(objectives)
 		
@@ -233,6 +230,7 @@ setMethod(f = "initialize",
 				if(!is.null(on[[i]]$biomass))
 				{
 					bm=on[[i]]$biomass
+					
 					pos=which(react_id(model_temp)==bm)
 					if(length(pos)>0)
 					{
@@ -241,6 +239,7 @@ setMethod(f = "initialize",
 						vec[biomass_pos]=1
 						obj_coef(model_temp)=vec
 					}
+					
 				}
 				
 				
@@ -601,6 +600,7 @@ setMethod(f = "initialize",
 				if(!is.null(off[[i]]$biomass))
 				{
 					bm=off[[i]]$biomass
+					
 					pos=which(react_id(model_temp)==bm)
 					if(length(pos)>0)
 					{
@@ -609,6 +609,7 @@ setMethod(f = "initialize",
 						vec[biomass_pos]=1
 						obj_coef(model_temp)=vec
 					}
+					
 				}
 				
 				
@@ -1165,8 +1166,7 @@ setMethod(f = "initialize",
                       rowNames <- NULL
                       probName <- NULL
                   }
-
-
+			
 
                   # ---------------------------------------------
                   # build problem object

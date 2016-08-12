@@ -5,6 +5,6 @@
 Example metabolic network
 }
 \description{
-Example metabolic network model of type \code{modelorg} with 7 reactions and 4 metabolites.
+Example metabolic network model of type \code{modelorg} with 9 reactions and 6 metabolites.
 }
 \keyword{datasets}

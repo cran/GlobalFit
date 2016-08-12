@@ -1,5 +1,4 @@
-#v1.5.0
-#30.03.16
+#11.08.16
 
 
 make_full_network <- function(network,additional_reactions,verboseMode=1)
@@ -700,9 +699,10 @@ minimize_network <- function(new_network,influxes,verboseMode)
 	return(new_network)
 }
 
-bilevel_optimize <- function(network,on=c(),off=c(),algorithm=1,additional_reactions=NULL,minimize=TRUE,simple=FALSE,verboseMode=1,cancel_case_penalty=NULL,not_delete_for=c(),not_delete_back=c(),param_list=NULL,use_indicator_constraints=FALSE,
+bilevel_optimize <- function(network,on=c(),off=c(),algorithm=1,additional_reactions=NULL,minimize=TRUE,simple=FALSE,verboseMode=1,cancel_case_penalty=NULL,not_delete_for=c(),not_delete_back=c(),param_list=NULL,use_indicator_constraints=FALSE,remove_penalties_hin=c(),remove_penalties_back=c(),
 stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,alternatives=0,bio_stoich=1e-5,additional_biomass_metabolites=NULL,remove_biomass_metabolites=NULL,variable_lower_bound=NULL,forced_modifications=0)
 {
+	
 	max_penalty=1
 	old_network=network
 	react_erg=c()
@@ -725,14 +725,39 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	{
 		stop(paste0("Simple must be a logical (binary) variable! Current value: ",minimize ," !\n"))
 	}
-	if(algorithm!=1 && algorithm!=2)
+	if(algorithm!=1 && algorithm!=2 && algorithm!=3)
 	{
-		stop(paste0("Algorithm must be 1(fast) or 2 Current value: ",algorithm ," !\n"))
+		stop(paste0("Algorithm must be 1(fast), 2 or 3! Current value: ",algorithm ," !\n"))
 	}
-	if(algorithm==1 && length(variable_lower_bound)>0)
+	if(algorithm!=2 && length(variable_lower_bound)>0)
 	{
 		stop(paste0("Lower bounds of reactions can only be optimzed using algorithm 2. Current choice: ",algorithm ," !\n"))
-	}  
+	} 
+	if(algorithm==3 && length(additional_biomass_metabolites)>0)
+	{
+		stop(paste0("Biomass reaction cannot be modified with algorithm 3! Additional biomass metabolites > 0. Current choice: ",algorithm ," !\n"))
+	} 
+	if(algorithm==3 && length(remove_biomass_metabolites)>0)
+	{
+		stop(paste0("Biomass reaction cannot be modified with algorithm 3! Remove biomass metabolites > 0. Current choice: ",algorithm ," !\n"))
+	} 
+	if(length(remove_penalties_back)>0 && length(remove_penalties_back)!=length(react_id(network)))
+	{
+		stop(paste0("Penalties vector for removing backward reaction has not the same length as the number of reactions in the network: ",length(remove_penalties_back),"\t",length(react_id(network)) ," !\n"))
+	}
+	if(length(remove_penalties_hin)>0 && length(remove_penalties_hin)!=length(react_id(network)))
+	{
+		stop(paste0("Penalties vector for removing forward reaction has not the same length as the number of reactions in the network: ",length(remove_penalties_hin),"\t",length(react_id(network)) ," !\n"))
+	}
+	if(length(remove_penalties_back)==0)
+	{
+		remove_penalties_back=rep(1,length(react_id(network)))
+	}
+	if(length(remove_penalties_hin)==0)
+	{
+		remove_penalties_hin=rep(1,length(react_id(network)))
+	}
+	 
 	reaction_names=c()
 	penM=c()
 	penalties=c()
@@ -1072,14 +1097,15 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	min_penalties_hin=c()
 	min_penalties_ruck=c()
 	
-	
+	min_rem_pen_hin=c()
+	min_rem_pen_back=c()
 	
 	back_model=min_network
 	
 	for(i in 1:length(react_id(min_network)))
 	{
 		pos=which(react_id(network)==react_id(min_network)[i])
-		
+		rea_pos=pos
 
 		if(length(pos)==0)
 		{
@@ -1092,7 +1118,8 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			}
 			min_penalties_hin=c(min_penalties_hin,penalties[pos])
 			min_penalties_ruck=c(min_penalties_ruck,penalties[pos])
-			
+			min_rem_pen_hin=c(min_rem_pen_hin,0)
+			min_rem_pen_back=c(min_rem_pen_back,0)
 				
 			
 			
@@ -1101,10 +1128,15 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 				
 			
 		}
+		else
+		{
+			min_rem_pen_hin=c(min_rem_pen_hin,remove_penalties_hin[rea_pos])
+			min_rem_pen_back=c(min_rem_pen_back,remove_penalties_back[rea_pos])
+		}
 	}
 	
-	
-	
+	min_rem_pen_hin=c(min_rem_pen_hin,rep(0,length(additional_biomass_metabolites)))
+	min_rem_pen_back=c(min_rem_pen_back,rep(0,length(additional_biomass_metabolites)))
 	
 	
 	SM=S(min_network)
@@ -1626,7 +1658,6 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 	
 	a_sol=0
 	stop_it=0
-	
 	alt_list=c()
 	while(stop_it!=1)
 	{
@@ -1641,13 +1672,12 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 			cat("building problem...\n")
 		}
 		
-		
 		if(algorithm==2)
 		{
 		probl=sysBiolAlg(min_network,"GlobalFit",off=off,on=on,num_additional_reactions=num_additional_reactions, penalties_hin=min_penalties_hin
 		,penalties_ruck=min_penalties_ruck,cancel_case_penalty=cancel_case_penalty,not_delete_for=not_delete_for,bio_stoich=bio_stoich
 		,not_delete_back=not_delete_back,simple=simple,solverParm=param_list,additional_biomass_metabolites=additional_biomass_metabolites
-		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin
+		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin,del_pen_hin=min_rem_pen_hin,del_pen_ruck=min_rem_pen_back
 		,reverse_hin_penalty=reverse_hin_penalties,reverse_back=reverse_back,reverse_back_penalty=reverse_back_penalties
 		,MaxPenalty=MaxPenalty,alternatives_list=alt_list,variable_lower_bound=variable_lower_bound,forced_alterations=forced_modifications
 		,use_indicator_constraints=use_indicator_constraints
@@ -1656,17 +1686,30 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		}
 		if(algorithm==1)
 		{
+		
 		probl=sysBiolAlg(min_network,"FastGlobalFit",off=off,on=on,num_additional_reactions=num_additional_reactions, penalties_hin=min_penalties_hin
 		,penalties_ruck=min_penalties_ruck,cancel_case_penalty=cancel_case_penalty,not_delete_for=not_delete_for,bio_stoich=bio_stoich
 		,not_delete_back=not_delete_back,simple=simple,solverParm=param_list,additional_biomass_metabolites=additional_biomass_metabolites
-		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin
+		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin,del_pen_hin=min_rem_pen_hin,del_pen_ruck=min_rem_pen_back
 		,reverse_hin_penalty=reverse_hin_penalties,reverse_back=reverse_back,reverse_back_penalty=reverse_back_penalties
 		,MaxPenalty=MaxPenalty,alternatives_list=alt_list,variable_lower_bound=NULL,forced_alterations=forced_modifications
 		,use_indicator_constraints=use_indicator_constraints
 		#,writeProbToFileName="/home/daniel/Desktop/endophyte_genomes/skripts/globalfit/prob.lp"
 		)
 		}
+		if(algorithm==3)
+		{
 		
+		probl=sysBiolAlg(min_network,"FastGlobalFit_MULT_BIOM",off=off,on=on,num_additional_reactions=num_additional_reactions, penalties_hin=min_penalties_hin
+		,penalties_ruck=min_penalties_ruck,cancel_case_penalty=cancel_case_penalty,not_delete_for=not_delete_for,bio_stoich=bio_stoich
+		,not_delete_back=not_delete_back,simple=simple,solverParm=param_list,additional_biomass_metabolites=additional_biomass_metabolites
+		,remove_biomass_metabolites=remove_biomass_metabolites,reverse_hin=reverse_hin,del_pen_hin=min_rem_pen_hin,del_pen_ruck=min_rem_pen_back
+		,reverse_hin_penalty=reverse_hin_penalties,reverse_back=reverse_back,reverse_back_penalty=reverse_back_penalties
+		,MaxPenalty=MaxPenalty,alternatives_list=alt_list,variable_lower_bound=NULL,forced_alterations=forced_modifications
+		,use_indicator_constraints=use_indicator_constraints
+		#,writeProbToFileName="/home/daniel/Desktop/endophyte_genomes/skripts/globalfit/prob.lp"
+		)
+		}
 		erg=proc.time()-ptm
 		
 		
@@ -2432,12 +2475,12 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		{
 			if(verboseMode==1)
 			{
-				cat("\tNONE\n")
+				cat("\tNONE\n\n")
 			
 			}
 			if(print_it==1 && is.null(stat_file)!=TRUE)
 			{
-				cat("\tNONE\n",file=stat_file,append=TRUE)
+				cat("\tNONE\n\n",file=stat_file,append=TRUE)
 			}
 		}
 		o=optimizeProb(network)
@@ -2452,7 +2495,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		{
 			cat(paste0("Growth:\tWildtype\t",lp_obj(o),"\n"),file=stat_file,append=TRUE)
 		}
-
+		
 		if(length(on)>0)
 		{
 	
@@ -2557,7 +2600,7 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 		}
 		if(length(off)>0)
 		{
-	
+			
 			for(i in 1:length(off))
 			{
 				name=off[[i]]$name
@@ -2566,14 +2609,20 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 				
 				if(!is.null(off[[i]]$biomass))
 				{
+					vec=rep(0,length(react_id(op2)))
+					obj_coef(op2)=vec
+							
 					bm=off[[i]]$biomass
-					pos=which(react_id(op2)==bm)
-					if(length(pos)>0)
+					for(k in 1:length(bm))
 					{
-						biomass_pos=pos
-						vec=rep(0,length(react_id(op2)))
-						vec[biomass_pos]=1
-						obj_coef(op2)=vec
+						pos=which(react_id(op2)==bm[k])
+						if(length(pos)>0)
+						{
+							biomass_pos=pos
+							vec=obj_coef(op2)
+							vec[biomass_pos]=1
+							obj_coef(op2)=vec
+						}
 					}
 				}
 				for(j in 1:length(delete))
@@ -2642,14 +2691,16 @@ stat_file=NULL,react_file=NULL,reverse_reaction_list=NULL,MaxPenalty=NULL,altern
 				}
 				o=optimizeProb(op2)
 				
+				
 				if(verboseMode==1)
 				{
-					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"))
+					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",paste0(react_id(op2)[which(obj_coef(op2)!=0)],collapse=","),"\n"))
 				
 				}
 				if(print_it==1 && is.null(stat_file)!=TRUE)
 				{
-					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",react_id(op2)[which(obj_coef(op2)!=0)],"\n"),file=stat_file,append=TRUE)
+					cat(paste0("Non-Growth:\t",name,"\tObjective value:\t",lp_obj(o),"\tBiomass reaction:\t",paste0(react_id(op2)[which(obj_coef(op2)!=0)],collapse=","),"\n"),file=stat_file,append=TRUE)
+					
 				}
 				
 			}
